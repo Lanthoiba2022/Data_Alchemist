@@ -19,6 +19,7 @@ type Action =
   | { type: 'SET_PRIORITY_WEIGHTS'; payload: PriorityWeights }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_SEARCH_QUERY'; payload: string }
+  | { type: 'SET_FILE_UPLOADED'; payload: 'clients' | 'workers' | 'tasks' }
   | { type: 'CLEAR_ALL_DATA' };
 
 // Initial state
@@ -36,6 +37,11 @@ const initialState: AppState = {
   },
   isLoading: false,
   searchQuery: '',
+  uploadedFiles: {
+    clients: false,
+    workers: false,
+    tasks: false,
+  },
 };
 
 // Reducer function
@@ -131,6 +137,15 @@ function dataReducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         searchQuery: action.payload,
+      };
+
+    case 'SET_FILE_UPLOADED':
+      return {
+        ...state,
+        uploadedFiles: {
+          ...state.uploadedFiles,
+          [action.payload]: true,
+        },
       };
 
     case 'CLEAR_ALL_DATA':

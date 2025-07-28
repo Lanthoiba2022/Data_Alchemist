@@ -14,7 +14,7 @@ import {
   AccordionSummary,
   AccordionDetails
 } from '@mui/material';
-import { Error, Warning, CheckCircle } from '@mui/icons-material';
+import { Error, Warning, CheckCircle, ExpandMore } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import { ValidationError } from '../types';
 
@@ -124,19 +124,28 @@ export function ValidationSummary() {
             if (errors.length === 0) return null;
             
             return (
-              <Accordion key={entity} defaultExpanded>
-                <AccordionSummary>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Accordion key={entity} defaultExpanded={false} sx={{ mb: 1 }}>
+                <AccordionSummary
+                  expandIcon={<ExpandMore />}
+                  sx={{
+                    backgroundColor: 'grey.50',
+                    '&:hover': {
+                      backgroundColor: 'grey.100',
+                    },
+                    borderRadius: 1,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                     <Error color="error" />
-                    <Typography variant="subtitle1">
+                    <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
                       {getEntityDisplayName(entity)} ({errors.length} errors)
                     </Typography>
                   </Box>
                 </AccordionSummary>
-                <AccordionDetails>
-                  <List dense>
+                <AccordionDetails sx={{ pt: 1 }}>
+                  <List dense sx={{ py: 0 }}>
                     {errors.map((error, index) => (
-                      <ListItem key={index} sx={{ py: 0.5 }}>
+                      <ListItem key={index} sx={{ py: 0.5, px: 0 }}>
                         <ListItemIcon sx={{ minWidth: 32 }}>
                           {getErrorIcon(error)}
                         </ListItemIcon>
