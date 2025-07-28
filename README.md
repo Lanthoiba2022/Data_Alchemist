@@ -1,36 +1,176 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Data Alchemist - Excel Data Processing Application
+
+A Next.js application for processing and validating client, worker, and task data from Excel files.
+
+## Features
+
+- **Multi-format Support**: Upload CSV and Excel files (.xlsx, .xls)
+- **Data Validation**: Comprehensive validation with detailed error reporting
+- **Flexible Data Transformation**: Handles various column name formats
+- **Real-time Validation**: Immediate feedback on data quality
+- **Export Capabilities**: Export processed data to CSV or JSON
+
+## Excel Data Format
+
+The application expects three types of Excel files with specific column structures:
+
+### Clients Data
+Expected columns:
+- `ClientID` - Unique client identifier (e.g., "C1", "C2")
+- `ClientName` - Client name (e.g., "Acme Corp", "Globex Inc")
+- `PriorityLevel` - Priority level 1-5
+- `RequestedTaskIDs` - Comma-separated task IDs (e.g., "T1,T2,T3")
+- `GroupTag` - Group classification (e.g., "GroupA", "GroupB", "GroupC")
+- `AttributesJSON` - JSON string with additional attributes
+
+### Workers Data
+Expected columns:
+- `WorkerID` - Unique worker identifier (e.g., "W1", "W2")
+- `WorkerName` - Worker name (e.g., "Worker1", "Worker2")
+- `Skills` - Comma-separated skills (e.g., "data,analysis", "coding,ml")
+- `AvailableSlots` - JSON array of available time slots (e.g., "[1,2,3]")
+- `MaxLoadPerPh` - Maximum load per phase (integer)
+- `WorkerGroup` - Group classification (e.g., "GroupA", "GroupB", "GroupC")
+- `QualificationLevel` - Qualification level 1-5
+
+### Tasks Data
+Expected columns:
+- `TaskID` - Unique task identifier (e.g., "T1", "T2")
+- `TaskName` - Task name (e.g., "Data Cleanup", "Report Generation")
+- `Category` - Task category (e.g., "ETL", "Analytics", "ML")
+- `Duration` - Task duration (integer)
+- `RequiredSkills` - Comma-separated required skills
+- `PreferredPhase` - JSON array of preferred phases (e.g., "[1,2]", "[2,3,4]")
+- `MaxConcurrent` - Maximum concurrent instances (integer)
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+- Node.js 18+ 
+- npm or yarn
 
+### Installation
+
+1. Clone the repository:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd data-alchemist
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Start the development server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Learn More
+## Usage
 
-To learn more about Next.js, take a look at the following resources:
+### Uploading Data
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Prepare Excel Files**: Ensure your Excel files follow the expected column structure
+2. **Upload Files**: Use the upload components for each data type (Clients, Workers, Tasks)
+3. **Review Validation**: Check for any validation errors or warnings
+4. **Process Data**: Valid data will be automatically processed and stored
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Data Validation
 
-## Deploy on Vercel
+The application performs comprehensive validation:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Schema Validation**: Ensures all required fields are present and in correct format
+- **Cross-entity Validation**: Validates relationships between clients, workers, and tasks
+- **Business Rule Validation**: Checks for logical consistency (e.g., worker skills matching task requirements)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Export Options
+
+- **CSV Export**: Download processed data as CSV files
+- **JSON Export**: Export data in JSON format for further processing
+
+## Technical Details
+
+### File Structure
+```
+app/
+├── components/          # React components
+│   ├── DataGrid.tsx    # Data display component
+│   ├── FileUpload.tsx  # File upload component
+│   └── ValidationSummary.tsx # Validation results
+├── context/
+│   └── DataContext.tsx # Application state management
+├── types/
+│   └── index.ts        # TypeScript type definitions
+├── utils/
+│   ├── fileParser.ts   # File parsing utilities
+│   ├── validation.ts   # Data validation logic
+│   ├── dataTransformer.ts # Data transformation utilities
+│   └── sampleData.ts   # Sample data for testing
+```
+
+### Key Technologies
+
+- **Next.js 15**: React framework with App Router
+- **TypeScript**: Type-safe development
+- **Material-UI**: UI component library
+- **Zod**: Schema validation
+- **Papa Parse**: CSV parsing
+- **XLSX**: Excel file processing
+
+### Data Processing Flow
+
+1. **File Upload**: User uploads Excel/CSV file
+2. **Raw Parsing**: File is parsed into raw data objects
+3. **Data Transformation**: Raw data is transformed to application format
+4. **Validation**: Data is validated against schemas and business rules
+5. **State Update**: Valid data is stored in application state
+6. **Error Reporting**: Validation errors are displayed to user
+
+## Development
+
+### Adding New Validation Rules
+
+1. Update the schema in `app/types/index.ts`
+2. Add validation logic in `app/utils/validation.ts`
+3. Test with sample data
+
+### Extending Data Types
+
+1. Define new types in `app/types/index.ts`
+2. Add transformation logic in `app/utils/dataTransformer.ts`
+3. Update validation rules
+4. Add UI components as needed
+
+### Running Tests
+
+```bash
+npm run lint    # Run ESLint
+npm run build   # Build for production
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **File Upload Fails**: Ensure file format is supported (.csv, .xlsx, .xls)
+2. **Validation Errors**: Check column names match expected format
+3. **Data Not Loading**: Verify Excel file structure matches requirements
+
+### Debug Mode
+
+Enable debug logging by setting `NODE_ENV=development` and check browser console for detailed error messages.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License.
