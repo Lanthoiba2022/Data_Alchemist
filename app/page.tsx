@@ -6,7 +6,7 @@ import { DataProvider } from './context/DataContext';
 import { FileUpload } from './components/FileUpload';
 import { DataGrid } from './components/DataGrid';
 import { ValidationSummary } from './components/ValidationSummary';
-import { TestComponent } from './components/TestComponent';
+import { DataProcessingComponent } from './components/DataProcessingComponent';
 
 function DataGridWrapper() {
   const [activeDataTab, setActiveDataTab] = useState(0);
@@ -51,7 +51,7 @@ function DataAlchemistApp() {
       <Box sx={{ mt: 4 }}>
         <Paper elevation={2} sx={{ mb: 3 }}>
           <Tabs value={activeTab} onChange={handleTabChange} centered>
-            <Tab label="Test Data" />
+            <Tab label="Data Processing" />
             <Tab label="Upload Files" />
             <Tab label="View Data" />
             <Tab label="Validation" />
@@ -59,7 +59,7 @@ function DataAlchemistApp() {
         </Paper>
 
         {activeTab === 0 && (
-          <TestComponent />
+          <DataProcessingComponent />
         )}
 
         {activeTab === 1 && (

@@ -41,6 +41,7 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
             
             if (valid.length > 0) {
               dispatch({ type: 'SET_CLIENTS', payload: valid });
+              dispatch({ type: 'SET_FILE_UPLOADED', payload: 'clients' });
               setSuccess(`Successfully uploaded ${valid.length} clients${invalid.length > 0 ? ` (${invalid.length} invalid rows skipped)` : ''}`);
             }
             
@@ -58,6 +59,7 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
             
             if (valid.length > 0) {
               dispatch({ type: 'SET_WORKERS', payload: valid });
+              dispatch({ type: 'SET_FILE_UPLOADED', payload: 'workers' });
               setSuccess(`Successfully uploaded ${valid.length} workers${invalid.length > 0 ? ` (${invalid.length} invalid rows skipped)` : ''}`);
             }
             
@@ -75,6 +77,7 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
             
             if (valid.length > 0) {
               dispatch({ type: 'SET_TASKS', payload: valid });
+              dispatch({ type: 'SET_FILE_UPLOADED', payload: 'tasks' });
               setSuccess(`Successfully uploaded ${valid.length} tasks${invalid.length > 0 ? ` (${invalid.length} invalid rows skipped)` : ''}`);
             }
             
@@ -193,4 +196,4 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
       )}
     </Paper>
   );
-} 
+}

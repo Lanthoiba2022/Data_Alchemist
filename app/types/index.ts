@@ -95,4 +95,9 @@ export interface AppState {
   priorityWeights: PriorityWeights;
   isLoading: boolean;
   searchQuery: string;
+  uploadedFiles: {
+    clients: boolean;
+    workers: boolean;
+    tasks: boolean;
+  };
 } 
