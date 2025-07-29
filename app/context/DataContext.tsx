@@ -1,8 +1,9 @@
 'use client';
 
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, ReactNode, useEffect } from 'react';
 import { Client, Worker, Task, ValidationError, BusinessRule, PriorityWeights, AppState } from '../types';
 import { DataValidator } from '../utils/validation';
+import { supabase } from '../utils/supabaseClient';
 
 // Action types
 type Action =
@@ -167,6 +168,30 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 // Provider component
 export function DataProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(dataReducer, initialState);
+
+  useEffect(() => {
+    async function fetchData() {
+      const [clients, workers, tasks, rules] = await Promise.all([
+        supabase.from('clients').select('*'),
+        supabase.from('workers').select('*'),
+        supabase.from('tasks').select('*'),
+        supabase.from('rules').select('*'),
+      ]);
+      if (clients.data) dispatch({ type: 'SET_CLIENTS', payload: clients.data });
+      if (workers.data) dispatch({ type: 'SET_WORKERS', payload: workers.data });
+      if (tasks.data) dispatch({ type: 'SET_TASKS', payload: tasks.data });
+      if (rules.data) rules.data.forEach((rule: any) => dispatch({ type: 'ADD_BUSINESS_RULE', payload: rule }));
+    }
+    fetchData();
+  }, []);
+
+  // Sync to Supabase on state change
+  useEffect(() => {
+    supabase.from('clients').upsert(state.clients);
+    supabase.from('workers').upsert(state.workers);
+    supabase.from('tasks').upsert(state.tasks);
+    supabase.from('rules').upsert(state.businessRules);
+  }, [state.clients, state.workers, state.tasks, state.businessRules]);
 
   return (
     <DataContext.Provider value={{ state, dispatch }}>

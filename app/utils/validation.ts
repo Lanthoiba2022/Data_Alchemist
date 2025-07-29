@@ -1,5 +1,5 @@
 import { Client, Worker, Task, ValidationError } from '../types';
-import { ClientSchema, WorkerSchema, TaskSchema } from '../types';
+import { ClientSchema, WorkerSchema, TaskSchema, ClientInputSchema, WorkerInputSchema, TaskInputSchema } from '../types';
 
 export class DataValidator {
   private clients: Client[] = [];
@@ -31,7 +31,39 @@ export class DataValidator {
     const errors: ValidationError[] = [];
     
     this.clients.forEach((client, index) => {
-      // Schema validation
+      // First validate with input schema to catch basic format issues
+      const inputResult = ClientInputSchema.safeParse(client);
+      if (!inputResult.success) {
+        inputResult.error.issues.forEach(issue => {
+          let message = issue.message;
+          let value = client[issue.path[0] as keyof Client];
+          
+          // Provide more specific error messages for JSON fields
+          if (issue.path[0] === 'AttributesJSON') {
+            if (typeof value === 'string') {
+              try {
+                JSON.parse(value);
+              } catch {
+                message = 'Invalid JSON format';
+              }
+            } else if (typeof value === 'object' && value !== null) {
+              // Object is valid, no error
+              return;
+            }
+          }
+          
+          errors.push({
+            entity: 'client',
+            rowIndex: index,
+            field: issue.path.join('.'),
+            message,
+            value
+          });
+        });
+        return;
+      }
+
+      // Then validate with full schema for transformation issues
       const result = ClientSchema.safeParse(client);
       if (!result.success) {
         result.error.issues.forEach(issue => {
@@ -71,7 +103,41 @@ export class DataValidator {
     const errors: ValidationError[] = [];
     
     this.workers.forEach((worker, index) => {
-      // Schema validation
+      // First validate with input schema to catch basic format issues
+      const inputResult = WorkerInputSchema.safeParse(worker);
+      if (!inputResult.success) {
+        inputResult.error.issues.forEach(issue => {
+          let message = issue.message;
+          let value = worker[issue.path[0] as keyof Worker];
+          
+          // Provide more specific error messages for JSON fields
+          if (issue.path[0] === 'AvailableSlots') {
+            if (typeof value === 'string') {
+              try {
+                const parsed = JSON.parse(value);
+                if (!Array.isArray(parsed)) {
+                  message = 'AvailableSlots must be a JSON array of numbers';
+                }
+              } catch {
+                message = 'Invalid JSON format for AvailableSlots';
+              }
+            } else if (!Array.isArray(value)) {
+              message = 'AvailableSlots must be an array of numbers';
+            }
+          }
+          
+          errors.push({
+            entity: 'worker',
+            rowIndex: index,
+            field: issue.path.join('.'),
+            message,
+            value
+          });
+        });
+        return;
+      }
+
+      // Then validate with full schema for transformation issues
       const result = WorkerSchema.safeParse(worker);
       if (!result.success) {
         result.error.issues.forEach(issue => {
@@ -111,7 +177,41 @@ export class DataValidator {
     const errors: ValidationError[] = [];
     
     this.tasks.forEach((task, index) => {
-      // Schema validation
+      // First validate with input schema to catch basic format issues
+      const inputResult = TaskInputSchema.safeParse(task);
+      if (!inputResult.success) {
+        inputResult.error.issues.forEach(issue => {
+          let message = issue.message;
+          let value = task[issue.path[0] as keyof Task];
+          
+          // Provide more specific error messages for JSON fields
+          if (issue.path[0] === 'PreferredPhase') {
+            if (typeof value === 'string') {
+              try {
+                const parsed = JSON.parse(value);
+                if (!Array.isArray(parsed)) {
+                  message = 'PreferredPhase must be a JSON array of numbers';
+                }
+              } catch {
+                message = 'Invalid JSON format for PreferredPhase';
+              }
+            } else if (!Array.isArray(value)) {
+              message = 'PreferredPhase must be an array of numbers';
+            }
+          }
+          
+          errors.push({
+            entity: 'task',
+            rowIndex: index,
+            field: issue.path.join('.'),
+            message,
+            value
+          });
+        });
+        return;
+      }
+
+      // Then validate with full schema for transformation issues
       const result = TaskSchema.safeParse(task);
       if (!result.success) {
         result.error.issues.forEach(issue => {
@@ -235,47 +335,147 @@ export class DataValidator {
     
     switch (entity) {
       case 'client':
-        const clientResult = ClientSchema.safeParse(data);
-        if (!clientResult.success) {
-          clientResult.error.issues.forEach(issue => {
+        // First validate with input schema
+        const clientInputResult = ClientInputSchema.safeParse(data);
+        if (!clientInputResult.success) {
+          clientInputResult.error.issues.forEach(issue => {
+            let message = issue.message;
+            let value = data[issue.path[0] as keyof Client];
+            
+            // Provide more specific error messages for JSON fields
+            if (issue.path[0] === 'AttributesJSON') {
+              if (typeof value === 'string') {
+                try {
+                  JSON.parse(value);
+                } catch {
+                  message = 'Invalid JSON format';
+                }
+              } else if (typeof value === 'object' && value !== null) {
+                // Object is valid, no error
+                return;
+              }
+            }
+            
             errors.push({
               entity: 'client',
               rowIndex,
               field: issue.path.join('.'),
-              message: issue.message,
-              value: data[issue.path[0] as keyof Client]
+              message,
+              value
             });
           });
+        } else {
+          // Then validate with full schema
+          const clientResult = ClientSchema.safeParse(data);
+          if (!clientResult.success) {
+            clientResult.error.issues.forEach(issue => {
+              errors.push({
+                entity: 'client',
+                rowIndex,
+                field: issue.path.join('.'),
+                message: issue.message,
+                value: data[issue.path[0] as keyof Client]
+              });
+            });
+          }
         }
         break;
         
       case 'worker':
-        const workerResult = WorkerSchema.safeParse(data);
-        if (!workerResult.success) {
-          workerResult.error.issues.forEach(issue => {
+        // First validate with input schema
+        const workerInputResult = WorkerInputSchema.safeParse(data);
+        if (!workerInputResult.success) {
+          workerInputResult.error.issues.forEach(issue => {
+            let message = issue.message;
+            let value = data[issue.path[0] as keyof Worker];
+            
+            // Provide more specific error messages for JSON fields
+            if (issue.path[0] === 'AvailableSlots') {
+              if (typeof value === 'string') {
+                try {
+                  const parsed = JSON.parse(value);
+                  if (!Array.isArray(parsed)) {
+                    message = 'AvailableSlots must be a JSON array of numbers';
+                  }
+                } catch {
+                  message = 'Invalid JSON format for AvailableSlots';
+                }
+              } else if (!Array.isArray(value)) {
+                message = 'AvailableSlots must be an array of numbers';
+              }
+            }
+            
             errors.push({
               entity: 'worker',
               rowIndex,
               field: issue.path.join('.'),
-              message: issue.message,
-              value: data[issue.path[0] as keyof Worker]
+              message,
+              value
             });
           });
+        } else {
+          // Then validate with full schema
+          const workerResult = WorkerSchema.safeParse(data);
+          if (!workerResult.success) {
+            workerResult.error.issues.forEach(issue => {
+              errors.push({
+                entity: 'worker',
+                rowIndex,
+                field: issue.path.join('.'),
+                message: issue.message,
+                value: data[issue.path[0] as keyof Worker]
+              });
+            });
+          }
         }
         break;
         
       case 'task':
-        const taskResult = TaskSchema.safeParse(data);
-        if (!taskResult.success) {
-          taskResult.error.issues.forEach(issue => {
+        // First validate with input schema
+        const taskInputResult = TaskInputSchema.safeParse(data);
+        if (!taskInputResult.success) {
+          taskInputResult.error.issues.forEach(issue => {
+            let message = issue.message;
+            let value = data[issue.path[0] as keyof Task];
+            
+            // Provide more specific error messages for JSON fields
+            if (issue.path[0] === 'PreferredPhase') {
+              if (typeof value === 'string') {
+                try {
+                  const parsed = JSON.parse(value);
+                  if (!Array.isArray(parsed)) {
+                    message = 'PreferredPhase must be a JSON array of numbers';
+                  }
+                } catch {
+                  message = 'Invalid JSON format for PreferredPhase';
+                }
+              } else if (!Array.isArray(value)) {
+                message = 'PreferredPhase must be an array of numbers';
+              }
+            }
+            
             errors.push({
               entity: 'task',
               rowIndex,
               field: issue.path.join('.'),
-              message: issue.message,
-              value: data[issue.path[0] as keyof Task]
+              message,
+              value
             });
           });
+        } else {
+          // Then validate with full schema
+          const taskResult = TaskSchema.safeParse(data);
+          if (!taskResult.success) {
+            taskResult.error.issues.forEach(issue => {
+              errors.push({
+                entity: 'task',
+                rowIndex,
+                field: issue.path.join('.'),
+                message: issue.message,
+                value: data[issue.path[0] as keyof Task]
+              });
+            });
+          }
         }
         break;
     }
