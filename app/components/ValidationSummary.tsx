@@ -12,15 +12,22 @@ import {
   Chip,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  Button
 } from '@mui/material';
 import { Error, Warning, CheckCircle, ExpandMore } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import { ValidationError } from '../types';
+import axios from 'axios';
+import { useState } from 'react';
 
 export function ValidationSummary() {
-  const { state } = useData();
+  const { state, dispatch } = useData();
   const { validationErrors } = state;
+
+  const [suggesting, setSuggesting] = useState<{ [key: string]: boolean }>({});
+  const [suggestedFixes, setSuggestedFixes] = useState<{ [key: string]: any }>({});
+  const [suggestError, setSuggestError] = useState<{ [key: string]: string }>({});
 
   const getErrorCount = () => validationErrors.length;
   const getWarningCount = () => 0; // For future warning types
@@ -60,6 +67,50 @@ export function ValidationSummary() {
       return 'error';
     }
     return 'warning';
+  };
+
+  const handleSuggestFix = async (entity: string, error: ValidationError, row: any) => {
+    setSuggesting((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: true }));
+    setSuggestError((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: '' }));
+    try {
+      const response = await axios.post('/api/ai-suggest-fix', {
+        error,
+        row,
+        entityType: entity,
+      });
+      setSuggestedFixes((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: response.data.fixedRow }));
+    } catch {
+      setSuggestError((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: 'AI suggestion failed.' }));
+    } finally {
+      setSuggesting((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: false }));
+    }
+  };
+  const handleApplyFix = (entity: string, rowIndex: number, fixedRow: any) => {
+    switch (entity) {
+      case 'client': {
+        const updated = [...state.clients];
+        updated[rowIndex] = { ...updated[rowIndex], ...fixedRow };
+        dispatch({ type: 'SET_CLIENTS', payload: updated });
+        break;
+      }
+      case 'worker': {
+        const updated = [...state.workers];
+        updated[rowIndex] = { ...updated[rowIndex], ...fixedRow };
+        dispatch({ type: 'SET_WORKERS', payload: updated });
+        break;
+      }
+      case 'task': {
+        const updated = [...state.tasks];
+        updated[rowIndex] = { ...updated[rowIndex], ...fixedRow };
+        dispatch({ type: 'SET_TASKS', payload: updated });
+        break;
+      }
+    }
+    setSuggestedFixes((prev) => {
+      const copy = { ...prev };
+      Object.keys(copy).forEach((k) => { if (k.startsWith(entity + rowIndex)) delete copy[k]; });
+      return copy;
+    });
   };
 
   if (validationErrors.length === 0 && state.clients.length + state.workers.length + state.tasks.length === 0) {
@@ -163,6 +214,30 @@ export function ValidationSummary() {
                             )
                           }
                         />
+                        <Box>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleSuggestFix(entity, error, (entity === 'client' ? state.clients : entity === 'worker' ? state.workers : state.tasks)[error.rowIndex])}
+                            disabled={suggesting[entity + error.rowIndex + error.field]}
+                            sx={{ mr: 1 }}
+                          >
+                            {suggesting[entity + error.rowIndex + error.field] ? 'Suggesting...' : 'Suggest Fix'}
+                          </Button>
+                          {suggestError[entity + error.rowIndex + error.field] && (
+                            <Typography color="error" variant="caption">{suggestError[entity + error.rowIndex + error.field]}</Typography>
+                          )}
+                          {suggestedFixes[entity + error.rowIndex + error.field] && (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="success"
+                              onClick={() => handleApplyFix(entity, error.rowIndex, suggestedFixes[entity + error.rowIndex + error.field])}
+                            >
+                              Apply Fix
+                            </Button>
+                          )}
+                        </Box>
                       </ListItem>
                     ))}
                   </List>

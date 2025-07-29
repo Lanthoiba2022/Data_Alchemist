@@ -94,6 +94,47 @@ export class FileParser {
     });
   }
 
+  // Parse Excel file with all sheets
+  static async parseExcelMultiSheet(file: File): Promise<{ [sheet: string]: ParseResult<any> }> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const result: { [sheet: string]: ParseResult<any> } = {};
+          workbook.SheetNames.forEach(sheetName => {
+            // Normalize sheet name for matching (e.g., 'Clients 1' -> 'clients')
+            const normalized = sheetName.trim().toLowerCase().replace(/\s+\d*$/, '');
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            if (jsonData.length < 2) {
+              result[normalized] = { data: [], errors: ['Sheet must have at least a header row and one data row'] };
+              return;
+            }
+            const headers = jsonData[0] as string[];
+            const rows = jsonData.slice(1) as any[][];
+            const dataObjects = rows.map((row) => {
+              const obj: any = {};
+              headers.forEach((header, colIndex) => {
+                obj[header] = row[colIndex] !== undefined ? row[colIndex] : '';
+              });
+              return obj;
+            });
+            result[normalized] = { data: dataObjects, errors: [] };
+          });
+          resolve(result);
+        } catch (error) {
+          resolve({ error: { data: [], errors: [`Excel parse error: ${error}`] } });
+        }
+      };
+      reader.onerror = () => {
+        resolve({ error: { data: [], errors: ['Failed to read Excel file'] } });
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
   // Parse file based on type
   static async parseFile<T>(file: File): Promise<ParseResult<T>> {
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
