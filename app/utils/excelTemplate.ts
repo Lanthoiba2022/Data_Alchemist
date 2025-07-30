@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { testClientData, testWorkerData, testTaskData } from './testData';
+import { testClients, testWorkers, testTasks } from './testData';
 
 export class ExcelTemplateGenerator {
   // Generate a template workbook with all three sheets
@@ -7,15 +7,15 @@ export class ExcelTemplateGenerator {
     const workbook = XLSX.utils.book_new();
     
     // Create Clients sheet
-    const clientsWorksheet = XLSX.utils.json_to_sheet(testClientData);
+    const clientsWorksheet = XLSX.utils.json_to_sheet(testClients);
     XLSX.utils.book_append_sheet(workbook, clientsWorksheet, 'Clients');
     
     // Create Workers sheet
-    const workersWorksheet = XLSX.utils.json_to_sheet(testWorkerData);
+    const workersWorksheet = XLSX.utils.json_to_sheet(testWorkers);
     XLSX.utils.book_append_sheet(workbook, workersWorksheet, 'Workers');
     
     // Create Tasks sheet
-    const tasksWorksheet = XLSX.utils.json_to_sheet(testTaskData);
+    const tasksWorksheet = XLSX.utils.json_to_sheet(testTasks);
     XLSX.utils.book_append_sheet(workbook, tasksWorksheet, 'Tasks');
     
     // Generate and download the file
@@ -34,7 +34,7 @@ export class ExcelTemplateGenerator {
   // Generate individual template sheets
   static generateClientsTemplate(): void {
     const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(testClientData);
+    const worksheet = XLSX.utils.json_to_sheet(testClients);
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Clients');
     
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
@@ -51,7 +51,7 @@ export class ExcelTemplateGenerator {
 
   static generateWorkersTemplate(): void {
     const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(testWorkerData);
+    const worksheet = XLSX.utils.json_to_sheet(testWorkers);
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Workers');
     
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
@@ -68,7 +68,7 @@ export class ExcelTemplateGenerator {
 
   static generateTasksTemplate(): void {
     const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(testTaskData);
+    const worksheet = XLSX.utils.json_to_sheet(testTasks);
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks');
     
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });

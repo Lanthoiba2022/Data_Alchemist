@@ -5,9 +5,9 @@ import type { PriorityWeights } from '../types';
 
 const WEIGHT_FIELDS: { key: keyof PriorityWeights; label: string; tip: string }[] = [
   { key: 'clientPriority', label: 'Client Priority', tip: 'How much to prioritize client preferences' },
-  { key: 'fulfillment', label: 'Fulfillment', tip: 'How much to maximize task fulfillment' },
-  { key: 'fairness', label: 'Fairness', tip: 'How much to balance assignments fairly' },
-  { key: 'workload', label: 'Workload', tip: 'How much to minimize worker overload' },
+  { key: 'workerFairness', label: 'Worker Fairness', tip: 'How much to balance assignments fairly among workers' },
+  { key: 'taskUrgency', label: 'Task Urgency', tip: 'How much to prioritize urgent tasks' },
+  { key: 'resourceUtilization', label: 'Resource Utilization', tip: 'How much to maximize resource efficiency' },
 ];
 
 export function PriorityWeights() {

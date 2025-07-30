@@ -8,7 +8,6 @@ import { FileParser } from '../utils/fileParser';
 import { DataTransformer } from '../utils/dataTransformer';
 import { ExcelTemplateGenerator } from '../utils/excelTemplate';
 import { Client, Worker, Task } from '../types';
-import axios from 'axios';
 
 interface FileUploadProps {
   entityType: 'clients' | 'workers' | 'tasks';
@@ -95,20 +94,28 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
           result = await FileParser.parseFile<any>(file);
           if (result.data.length > 0) {
             // After reading the file and before parsing rows:
-            let headers = [];
-            if (result && result.meta && result.meta.fields) {
-              headers = result.meta.fields;
-            } else if (result && result.data && result.data[0]) {
+            let headers: string[] = [];
+            if (result && result.data && result.data[0]) {
               headers = Object.keys(result.data[0]);
             }
             let mapping = null;
             if (headers.length > 0) {
               try {
-                const response = await axios.post('/api/ai-header-map', {
-                  headers,
-                  expected: expectedSchemas[entityType],
+                const response = await fetch('/api/ai-header-map', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    headers,
+                    expected: expectedSchemas[entityType],
+                  }),
                 });
-                mapping = response.data.mapping;
+                
+                if (response.ok) {
+                  const responseData = await response.json();
+                  mapping = responseData.mapping;
+                }
               } catch {
                 mapping = null;
               }
@@ -118,7 +125,7 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
             if (mapping) {
               remappedData = result.data.map((row: any) => {
                 const newRow: any = {};
-                Object.entries(mapping).forEach(([header, mapped]) => {
+                Object.entries(mapping as Record<string, string>).forEach(([header, mapped]) => {
                   if (mapped && row[header] !== undefined) newRow[mapped] = row[header];
                 });
                 return newRow;
@@ -143,20 +150,28 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
           result = await FileParser.parseFile<any>(file);
           if (result.data.length > 0) {
             // After reading the file and before parsing rows:
-            let headers = [];
-            if (result && result.meta && result.meta.fields) {
-              headers = result.meta.fields;
-            } else if (result && result.data && result.data[0]) {
+            let headers: string[] = [];
+            if (result && result.data && result.data[0]) {
               headers = Object.keys(result.data[0]);
             }
             let mapping = null;
             if (headers.length > 0) {
               try {
-                const response = await axios.post('/api/ai-header-map', {
-                  headers,
-                  expected: expectedSchemas[entityType],
+                const response = await fetch('/api/ai-header-map', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    headers,
+                    expected: expectedSchemas[entityType],
+                  }),
                 });
-                mapping = response.data.mapping;
+                
+                if (response.ok) {
+                  const responseData = await response.json();
+                  mapping = responseData.mapping;
+                }
               } catch {
                 mapping = null;
               }
@@ -166,7 +181,7 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
             if (mapping) {
               remappedData = result.data.map((row: any) => {
                 const newRow: any = {};
-                Object.entries(mapping).forEach(([header, mapped]) => {
+                Object.entries(mapping as Record<string, string>).forEach(([header, mapped]) => {
                   if (mapped && row[header] !== undefined) newRow[mapped] = row[header];
                 });
                 return newRow;
@@ -191,20 +206,28 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
           result = await FileParser.parseFile<any>(file);
           if (result.data.length > 0) {
             // After reading the file and before parsing rows:
-            let headers = [];
-            if (result && result.meta && result.meta.fields) {
-              headers = result.meta.fields;
-            } else if (result && result.data && result.data[0]) {
+            let headers: string[] = [];
+            if (result && result.data && result.data[0]) {
               headers = Object.keys(result.data[0]);
             }
             let mapping = null;
             if (headers.length > 0) {
               try {
-                const response = await axios.post('/api/ai-header-map', {
-                  headers,
-                  expected: expectedSchemas[entityType],
+                const response = await fetch('/api/ai-header-map', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    headers,
+                    expected: expectedSchemas[entityType],
+                  }),
                 });
-                mapping = response.data.mapping;
+                
+                if (response.ok) {
+                  const responseData = await response.json();
+                  mapping = responseData.mapping;
+                }
               } catch {
                 mapping = null;
               }
@@ -214,7 +237,7 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
             if (mapping) {
               remappedData = result.data.map((row: any) => {
                 const newRow: any = {};
-                Object.entries(mapping).forEach(([header, mapped]) => {
+                Object.entries(mapping as Record<string, string>).forEach(([header, mapped]) => {
                   if (mapped && row[header] !== undefined) newRow[mapped] = row[header];
                 });
                 return newRow;
@@ -271,79 +294,68 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
     }
   };
 
+  const handleDownloadTemplate = () => {
+    switch (entityType) {
+      case 'clients':
+        ExcelTemplateGenerator.generateClientsTemplate();
+        break;
+      case 'workers':
+        ExcelTemplateGenerator.generateWorkersTemplate();
+        break;
+      case 'tasks':
+        ExcelTemplateGenerator.generateTasksTemplate();
+        break;
+    }
+  };
+
   return (
     <Paper sx={{ p: 2, mb: 2 }}>
-      <Stack direction="row" spacing={2} alignItems="center">
+      <Stack direction="row" spacing={2} alignItems="center" mb={1}>
         <Button
           variant="contained"
           component="label"
-          startIcon={<CloudUpload />}
+          color="primary"
+          startIcon={isUploading ? <CircularProgress size={18} color="inherit" /> : undefined}
           disabled={isUploading}
         >
-          Upload {getEntityDisplayName()} File
+          {isUploading ? 'Uploading...' : `Upload ${getEntityDisplayName()} File`}
           <input
             type="file"
-            accept=".csv, .xlsx, .xls"
+            accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
             hidden
             onChange={handleFileUpload}
+            disabled={isUploading}
           />
         </Button>
         <Button
           variant="outlined"
           color="error"
           onClick={handleClearAll}
-          startIcon={<Download />}
+          disabled={isUploading}
         >
           Clear All Data
         </Button>
-        {isUploading && <CircularProgress size={24} />}
       </Stack>
-      
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography variant="body2" color="text.secondary" mb={1}>
         Expected columns: {getExpectedColumns()}
       </Typography>
-
-      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-        
-        <Button
-          variant="outlined"
-          startIcon={<Download />}
-          onClick={() => {
-            switch (entityType) {
-              case 'clients':
-                ExcelTemplateGenerator.generateClientsTemplate();
-                break;
-              case 'workers':
-                ExcelTemplateGenerator.generateWorkersTemplate();
-                break;
-              case 'tasks':
-                ExcelTemplateGenerator.generateTasksTemplate();
-                break;
-            }
-          }}
-        >
-          Download Template
-        </Button>
-      </Stack>
-
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-        <Description fontSize="small" />
-        <Typography variant="caption">
-          Supports CSV and Excel files
-        </Typography>
+      <Button
+        variant="outlined"
+        startIcon={<Download />}
+        onClick={handleDownloadTemplate}
+        sx={{ mb: 1 }}
+      >
+        Download Template
+      </Button>
+      <Box mt={1} mb={1}>
+        {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
+        {success && <Alert severity="success" sx={{ mb: 1 }}>{success}</Alert>}
       </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert severity="success" sx={{ mt: 2 }}>
-          {success}
-        </Alert>
-      )}
+      <Typography variant="caption" color="text.secondary">
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+          <span role="img" aria-label="file">📄</span> Supports CSV and Excel files
+        </Box>
+      </Typography>
     </Paper>
   );
 }

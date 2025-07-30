@@ -1,372 +1,385 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { DataGrid as MuiDataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import { Box, Chip, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Alert } from '@mui/material';
-import { Download, Warning } from '@mui/icons-material';
+import React, { useRef, useMemo, useCallback } from 'react';
+import { AgGridReact } from 'ag-grid-react';
+import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
+import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { useData } from '../context/DataContext';
-import { Client, Worker, Task } from '../types';
-import { FileParser } from '../utils/fileParser';
-import { DataTransformer } from '../utils/dataTransformer';
-import { sampleClients, sampleWorkers, sampleTasks } from '../utils/sampleData';
-import TextField from '@mui/material/TextField';
-import axios from 'axios';
-import Tooltip from '@mui/material/Tooltip';
 
-interface DataGridProps {
-  entityType: 'clients' | 'workers' | 'tasks';
+// Register AG Grid modules
+ModuleRegistry.registerModules([AllCommunityModule]);
+
+// TypeScript interfaces for AG Grid editors
+interface ICellEditorParams {
+  value: any;
+  api: any;
+  column: any;
+  colDef: any;
+  node: any;
+  data: any;
+  field: string;
 }
 
-export function DataGrid({ entityType }: DataGridProps) {
-  const { state, dispatch } = useData();
-  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
-  const [nlQuery, setNlQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [filteredRows, setFilteredRows] = useState<any[] | null>(null);
+interface ICellEditor {
+  init(params: ICellEditorParams): void;
+  getGui(): HTMLElement;
+  afterGuiAttached?(): void;
+  getValue(): any;
+  destroy?(): void;
+  isPopup?(): boolean;
+}
 
-  // Define getValidationErrors first
-  const getValidationErrors = () => {
-    const entityMap = { clients: 'client', workers: 'worker', tasks: 'task' } as const;
-    return state.validationErrors.filter(error => error.entity === entityMap[entityType]);
-  };
+// Custom Array Editor for comma-separated values
+class ArrayEditor implements ICellEditor {
+  private value: string = '';
+  private params!: ICellEditorParams;
+  private input!: HTMLInputElement;
 
-  // Then getErrorForCell
-  const getErrorForCell = (rowIndex: number, field: string) => {
-    return getValidationErrors().find(error => 
-      error.rowIndex === rowIndex && error.field === field
-    );
-  };
+  init(params: ICellEditorParams): void {
+    this.value = Array.isArray(params.value) ? params.value.join(', ') : (params.value || '');
+    this.params = params;
+  }
 
-  // Then renderArrayCell
-  const renderArrayCell = (params: GridRenderCellParams) => {
-    const error = getErrorForCell(params.row.id, params.field);
-    let values: string[] = [];
-    const val = params.row[params.field];
-    if (Array.isArray(val)) {
-      values = val.map((v: any) => String(v));
-    } else if (typeof val === 'string') {
-      values = val.split(',').map((v: string) => v.trim()).filter((v: string) => v.length > 0);
-    } else if (val !== undefined && val !== null) {
-      values = [String(val)];
-    }
-    return (
-      <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5, backgroundColor: error ? 'error.light' : 'transparent', border: error ? '1px solid error.main' : 'none', borderRadius: 1, px: 1 }}>
-        {values.map((value, index) => (
-          <Chip key={index} label={value} size="small" />
-        ))}
-        {error && (
-          <Typography variant="caption" color="error" sx={{ ml: 1 }}>{error.message}</Typography>
-        )}
-      </Box>
-    );
-  };
-
-  // Then renderJsonCell
-  const renderJsonCell = (params: GridRenderCellParams) => {
-    const error = getErrorForCell(params.row.id, params.field);
-    let displayValue = '';
-    const val = params.row[params.field];
-    if (typeof val === 'object' && val !== null) {
-      displayValue = JSON.stringify(val, null, 2);
-    } else if (typeof val === 'string') {
-      try {
-        displayValue = JSON.stringify(JSON.parse(val), null, 2);
-      } catch {
-        displayValue = val;
-      }
-    } else if (val === null || val === undefined) {
-      displayValue = '{}';
-    } else {
-      displayValue = String(val);
-    }
-    return (
-      <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', backgroundColor: error ? 'error.light' : 'transparent', border: error ? '1px solid error.main' : 'none', borderRadius: 1, px: 1 }}>
-        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{displayValue}</Typography>
-        {error && (
-          <Typography variant="caption" color="error" sx={{ ml: 1 }}>{error.message}</Typography>
-        )}
-      </Box>
-    );
-  };
-
-  // Then getColumns
-  const getColumns = (): GridColDef[] => {
-    switch (entityType) {
-      case 'clients':
-        return [
-          { field: 'ClientID', headerName: 'Client ID', width: 120, editable: true },
-          { field: 'ClientName', headerName: 'Client Name', width: 200, editable: true },
-          { field: 'PriorityLevel', headerName: 'Priority Level', width: 130, type: 'number', editable: true },
-          { field: 'RequestedTaskIDs', headerName: 'Requested Task IDs', width: 200, editable: true,
-            renderCell: renderArrayCell,
-            valueGetter: (params: any) => {
-              const val = params.row?.RequestedTaskIDs;
-              if (Array.isArray(val)) return val.join(',');
-              if (typeof val === 'string') return val;
-              return '';
-            },
-            valueFormatter: (params: any) => {
-              const val = params.value;
-              if (Array.isArray(val)) return val.join(',');
-              if (typeof val === 'string') return val;
-              return '';
-            },
-            renderEditCell: (params: any) => {
-              // Always use the row value for editing
-              let value = params.row?.RequestedTaskIDs;
-              if (Array.isArray(value)) value = value.join(',');
-              if (typeof value !== 'string') value = '';
-              return (
-                <input
-                  type="text"
-                  defaultValue={value}
-                  onBlur={e => params.api.setEditCellValue({ id: params.id, field: params.field, value: e.target.value }, e)}
-                  autoFocus
-                  style={{ width: '100%' }}
-                />
-              );
-            }
-          },
-          { field: 'GroupTag', headerName: 'Group Tag', width: 120, editable: true },
-          { field: 'AttributesJSON', headerName: 'Attributes JSON', width: 200, editable: true,
-            renderCell: renderJsonCell,
-            valueFormatter: (params: any) => {
-              if (typeof params.value === 'object' && params.value !== null) return JSON.stringify(params.value, null, 2);
-              if (typeof params.value === 'string') {
-                try { return JSON.stringify(JSON.parse(params.value), null, 2); } catch { return params.value; }
-              }
-              return '{}';
-            },
-            renderEditCell: (params: any) => <input type="text" defaultValue={typeof params.value === 'object' ? JSON.stringify(params.value) : (params.value || '')} onBlur={e => params.api.setEditCellValue({ id: params.id, field: params.field, value: e.target.value }, e)} autoFocus style={{ width: '100%' }} />
-          },
-        ];
-      case 'workers':
-        return [
-          { field: 'WorkerID', headerName: 'Worker ID', width: 120, editable: true },
-          { field: 'WorkerName', headerName: 'Worker Name', width: 200, editable: true },
-          { field: 'Skills', headerName: 'Skills', width: 200, editable: true,
-            renderCell: renderArrayCell,
-            valueGetter: (params: any) => Array.isArray(params.row?.Skills) ? params.row.Skills.join(',') : (params.row?.Skills || ''),
-            valueFormatter: (params: any) => Array.isArray(params.value) ? params.value.join(',') : (params.value || ''),
-            renderEditCell: (params: any) => <input type="text" defaultValue={Array.isArray(params.value) ? params.value.join(',') : (params.value || '')} onBlur={e => params.api.setEditCellValue({ id: params.id, field: params.field, value: e.target.value }, e)} autoFocus style={{ width: '100%' }} />
-          },
-          { field: 'AvailableSlots', headerName: 'Available Slots', width: 150, editable: true,
-            renderCell: renderJsonCell,
-            valueGetter: (params: any) => Array.isArray(params.row?.AvailableSlots) ? JSON.stringify(params.row.AvailableSlots) : (params.row?.AvailableSlots || '[]'),
-            valueFormatter: (params: any) => Array.isArray(params.value) ? JSON.stringify(params.value) : (params.value || '[]'),
-            renderEditCell: (params: any) => <input type="text" defaultValue={Array.isArray(params.value) ? JSON.stringify(params.value) : (params.value || '[]')} onBlur={e => params.api.setEditCellValue({ id: params.id, field: params.field, value: e.target.value }, e)} autoFocus style={{ width: '100%' }} />
-          },
-          { field: 'MaxLoadPerPh', headerName: 'Max Load Per Ph', width: 150, type: 'number', editable: true },
-          { field: 'WorkerGroup', headerName: 'Worker Group', width: 120, editable: true },
-          { field: 'QualificationLevel', headerName: 'Qualification Level', width: 150, type: 'number', editable: true },
-        ];
-      case 'tasks':
-        return [
-          { field: 'TaskID', headerName: 'Task ID', width: 120, editable: true },
-          { field: 'TaskName', headerName: 'Task Name', width: 200, editable: true },
-          { field: 'Category', headerName: 'Category', width: 120, editable: true },
-          { field: 'Duration', headerName: 'Duration', width: 100, type: 'number', editable: true },
-          { field: 'RequiredSkills', headerName: 'Required Skills', width: 200, editable: true,
-            renderCell: renderArrayCell,
-            valueGetter: (params: any) => Array.isArray(params.row?.RequiredSkills) ? params.row.RequiredSkills.join(',') : (params.row?.RequiredSkills || ''),
-            valueFormatter: (params: any) => Array.isArray(params.value) ? params.value.join(',') : (params.value || ''),
-            renderEditCell: (params: any) => <input type="text" defaultValue={Array.isArray(params.value) ? params.value.join(',') : (params.value || '')} onBlur={e => params.api.setEditCellValue({ id: params.id, field: params.field, value: e.target.value }, e)} autoFocus style={{ width: '100%' }} />
-          },
-          { field: 'PreferredPhase', headerName: 'Preferred Phase', width: 150, editable: true,
-            renderCell: renderJsonCell,
-            valueGetter: (params: any) => Array.isArray(params.row?.PreferredPhase) ? JSON.stringify(params.row.PreferredPhase) : (params.row?.PreferredPhase || '[]'),
-            valueFormatter: (params: any) => Array.isArray(params.value) ? JSON.stringify(params.value) : (params.value || '[]'),
-            renderEditCell: (params: any) => <input type="text" defaultValue={Array.isArray(params.value) ? JSON.stringify(params.value) : (params.value || '[]')} onBlur={e => params.api.setEditCellValue({ id: params.id, field: params.field, value: e.target.value }, e)} autoFocus style={{ width: '100%' }} />
-          },
-          { field: 'MaxConcurrent', headerName: 'Max Concurrent', width: 130, type: 'number', editable: true },
-        ];
-      default:
-        return [];
-    }
-  };
-
-  const schema = getColumns().map(col => ({ field: col.field, type: col.type || 'string' }));
-
-  const handleNLSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nlQuery.trim()) return;
-    setIsSearching(true);
-    try {
-      const data = getData();
-      const response = await axios.post('/api/nl-search', { query: nlQuery, schema });
-      const { filterBody } = response.data;
-      // eslint-disable-next-line no-new-func
-      const filterFn = new Function('row', filterBody);
-      const filtered = data.filter((row: any) => {
-        try {
-          return filterFn(row);
-        } catch {
-          return false;
-        }
-      });
-      setFilteredRows(filtered);
-    } catch {
-      setFilteredRows([]);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  // Remove the useEffect that loads sample data automatically
-
-  const getData = () => {
-    switch (entityType) {
-      case 'clients': return state.clients;
-      case 'workers': return state.workers;
-      case 'tasks': return state.tasks;
-    }
-  };
-
-  // Remove handleCellEditCommit and use only processRowUpdate for real-time editing
-
-  // Fix RequestedTaskIDs editing: always show the current value
-  const processRowUpdate = (newRow: any, oldRow: any) => {
-    const data = getData();
-    const rowIndex = data.findIndex((item: any) => item.id === oldRow.id);
-    if (rowIndex === -1) return oldRow;
-    // Validate JSON for AttributesJSON
-    if ('AttributesJSON' in newRow) {
-      let val = newRow.AttributesJSON;
-      if (typeof val === 'string') {
-        try {
-          newRow.AttributesJSON = JSON.stringify(JSON.parse(val));
-        } catch {
-          // keep as string if invalid
-        }
-      }
-    }
-    // Ensure blank fields are editable and persist
-    Object.keys(newRow).forEach((key) => {
-      if (newRow[key] === undefined) newRow[key] = '';
+  getGui(): HTMLElement {
+    this.input = document.createElement('input');
+    this.input.style.width = '100%';
+    this.input.style.height = '100%';
+    this.input.style.border = 'none';
+    this.input.style.outline = 'none';
+    this.input.style.padding = '4px';
+    this.input.value = this.value;
+    
+    this.input.addEventListener('input', (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      this.value = target.value;
     });
-    // Special handling for RequestedTaskIDs: always store as array, but edit as string
-    if ('RequestedTaskIDs' in newRow) {
-      if (typeof newRow.RequestedTaskIDs === 'string') {
-        newRow.RequestedTaskIDs = newRow.RequestedTaskIDs.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0);
-      } else if (!Array.isArray(newRow.RequestedTaskIDs)) {
-        newRow.RequestedTaskIDs = [];
+    
+    this.input.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        this.params.api.stopEditing();
       }
+    });
+    
+    return this.input;
+  }
+
+  afterGuiAttached(): void {
+    this.input.focus();
+    this.input.select();
+  }
+
+  getValue(): any {
+    return this.value
+      ? this.value.split(',').map((v: string) => v.trim()).filter(Boolean)
+      : [];
+  }
+
+  destroy(): void {
+    // cleanup if needed
+  }
+
+  isPopup(): boolean {
+    return false;
+  }
+}
+
+// Custom JSON Editor for JSON objects
+class JsonEditor implements ICellEditor {
+  private value: string = '';
+  private params!: ICellEditorParams;
+  private textarea!: HTMLTextAreaElement;
+
+  init(params: ICellEditorParams): void {
+    // If value is an object, stringify. If it's a valid JSON string, keep as-is. Otherwise, use the raw value (not '{}').
+    if (typeof params.value === 'object' && params.value !== null) {
+      this.value = JSON.stringify(params.value, null, 2);
+    } else if (typeof params.value === 'string') {
+      try {
+        JSON.parse(params.value);
+        this.value = params.value;
+      } catch {
+        this.value = params.value;
+      }
+    } else {
+      this.value = '';
     }
+    this.params = params;
+  }
+
+  getGui(): HTMLElement {
+    this.textarea = document.createElement('textarea');
+    this.textarea.style.width = '100%';
+    this.textarea.style.height = '100%';
+    this.textarea.style.border = 'none';
+    this.textarea.style.outline = 'none';
+    this.textarea.style.padding = '4px';
+    this.textarea.style.resize = 'none';
+    this.textarea.style.fontFamily = 'monospace';
+    this.textarea.value = this.value;
+    
+    this.textarea.addEventListener('input', (e: Event) => {
+      const target = e.target as HTMLTextAreaElement;
+      this.value = target.value;
+    });
+    
+    this.textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        this.params.api.stopEditing();
+      }
+    });
+    
+    return this.textarea;
+  }
+
+  afterGuiAttached(): void {
+    this.textarea.focus();
+    this.textarea.select();
+  }
+
+  getValue(): any {
+    try {
+      return JSON.parse(this.value);
+    } catch {
+      // Return as { message: ... } if not valid JSON and not empty
+      return this.value && this.value.trim() ? { message: this.value.trim() } : {};
+    }
+  }
+
+  destroy(): void {
+    // cleanup if needed
+  }
+
+  isPopup(): boolean {
+    return false;
+  }
+}
+
+// Add a helper to format JSON for display
+function formatJsonForDisplay(value: any): string {
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+    return '-';
+  }
+  if (typeof value === 'object' && value !== null) {
+    // Special case: { message: "..." }
+    if (
+      Object.keys(value).length === 1 &&
+      Object.prototype.hasOwnProperty.call(value, 'message') &&
+      typeof value.message === 'string'
+    ) {
+      return `{message: "${value.message}"}`;
+    }
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return '[object Object]';
+    }
+  }
+  if (typeof value === 'string') {
+    // If it's a valid JSON string, pretty print it
+    try {
+      const parsed = JSON.parse(value);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      // Show plain sentence as-is
+      return value.trim() || '-';
+    }
+  }
+  return '-';
+}
+
+// Add a helper to expand ranges like '2-3' to '2,3', '1-4' to '1,2,3,4'
+function expandRange(value: string): string {
+  if (!value || !value.trim()) return '-';
+  // Remove brackets if present
+  let v = value.trim().replace(/\[|\]/g, '');
+  // Handle comma-separated values
+  if (v.includes(',')) {
+    return v.split(',').map(s => s.trim()).join(',');
+  }
+  // Handle ranges like '1-2', '3 - 5', '1 -2', '1-4'
+  const rangeMatch = v.match(/^(\d+)\s*-\s*(\d+)$/);
+  if (rangeMatch) {
+    const start = parseInt(rangeMatch[1], 10);
+    const end = parseInt(rangeMatch[2], 10);
+    if (!isNaN(start) && !isNaN(end) && start <= end) {
+      return Array.from({ length: end - start + 1 }, (_, i) => (start + i).toString()).join(',');
+    }
+  }
+  // If it's a single number
+  if (/^\d+$/.test(v)) return v;
+  // If nothing matches, show a dash
+  return v || '-';
+}
+
+export function DataGrid({ entityType }: { entityType: 'clients' | 'workers' | 'tasks' }) {
+  const { state, dispatch } = useData();
+  const gridRef = useRef<any>(null);
+
+  const getRowData = useCallback((): any[] => {
     switch (entityType) {
-      case 'clients': {
-        const updated = [...state.clients];
-        updated[rowIndex] = { ...updated[rowIndex], ...newRow };
-        dispatch({ type: 'SET_CLIENTS', payload: updated });
-        break;
-      }
-      case 'workers': {
-        const updated = [...state.workers];
-        updated[rowIndex] = { ...updated[rowIndex], ...newRow };
-        dispatch({ type: 'SET_WORKERS', payload: updated });
-        break;
-      }
-      case 'tasks': {
-        const updated = [...state.tasks];
-        updated[rowIndex] = { ...updated[rowIndex], ...newRow };
-        dispatch({ type: 'SET_TASKS', payload: updated });
-        break;
-      }
+      case 'clients': return state.clients || [];
+      case 'workers': return state.workers || [];
+      case 'tasks': return state.tasks || [];
+      default: return [];
     }
-    return newRow;
+  }, [entityType, state]);
+
+  const setRowData = useCallback((data: any[]) => {
+    // Normalize all rows before setting
+    const normalizedData = data.map(row => {
+      const newRow = { ...row };
+      if ('PreferredPhase' in newRow) {
+        newRow.PreferredPhase = normalizePreferredPhase(newRow.PreferredPhase);
+      }
+      if ('AttributesJSON' in newRow) {
+        newRow.AttributesJSON = normalizeAttributesJSON(newRow.AttributesJSON);
+      }
+      return newRow;
+    });
+    switch (entityType) {
+      case 'clients': dispatch({ type: 'SET_CLIENTS', payload: normalizedData }); break;
+      case 'workers': dispatch({ type: 'SET_WORKERS', payload: normalizedData }); break;
+      case 'tasks': dispatch({ type: 'SET_TASKS', payload: normalizedData }); break;
+      default: break;
+    }
+  }, [entityType, dispatch]);
+
+  const columns = useMemo((): any[] => {
+    if (entityType === 'clients') {
+      return [
+        { field: 'ClientID', headerName: 'Client ID', editable: true, width: 120 },
+        { field: 'ClientName', headerName: 'Client Name', editable: true, width: 200 },
+        { field: 'PriorityLevel', headerName: 'Priority Level', editable: true, type: 'number', width: 130 },
+        { field: 'RequestedTaskIDs', headerName: 'Requested Task IDs', editable: true, cellEditor: ArrayEditor, width: 200 },
+        { field: 'GroupTag', headerName: 'Group Tag', editable: true, width: 120 },
+        {
+          field: 'AttributesJSON',
+          headerName: 'Attributes JSON',
+          editable: true,
+          cellEditor: JsonEditor,
+          width: 200,
+          valueFormatter: (params: any) => formatJsonForDisplay(params.value),
+        },
+      ];
+    } else if (entityType === 'workers') {
+      return [
+        { field: 'WorkerID', headerName: 'Worker ID', editable: true, width: 120 },
+        { field: 'WorkerName', headerName: 'Worker Name', editable: true, width: 200 },
+        { field: 'Skills', headerName: 'Skills', editable: true, cellEditor: ArrayEditor, width: 200 },
+        { field: 'AvailableSlots', headerName: 'Available Slots', editable: true, cellEditor: JsonEditor, width: 150 },
+        { field: 'MaxLoadPerPh', headerName: 'Max Load Per Ph', editable: true, type: 'number', width: 150 },
+        { field: 'WorkerGroup', headerName: 'Worker Group', editable: true, width: 120 },
+        { field: 'QualificationLevel', headerName: 'Qualification Level', editable: true, type: 'number', width: 150 },
+      ];
+    } else if (entityType === 'tasks') {
+      return [
+        { field: 'TaskID', headerName: 'Task ID', editable: true, width: 120 },
+        { field: 'TaskName', headerName: 'Task Name', editable: true, width: 200 },
+        { field: 'Category', headerName: 'Category', editable: true, width: 120 },
+        { field: 'Duration', headerName: 'Duration', editable: true, type: 'number', width: 100 },
+        { field: 'RequiredSkills', headerName: 'Required Skills', editable: true, cellEditor: ArrayEditor, width: 200 },
+        {
+          field: 'PreferredPhase',
+          headerName: 'Preferred Phase',
+          editable: true,
+          cellEditor: JsonEditor,
+          width: 150,
+          valueFormatter: (params: any) => {
+            const v = params.value;
+            if (Array.isArray(v)) {
+              return v.length > 0 ? v.join(',') : '-';
+            }
+            if (typeof v === 'object' && v !== null && Object.prototype.hasOwnProperty.call(v, 'message')) {
+              // If it's { message: "..." }, try to expand and show as array
+              const arr = normalizePreferredPhase(v.message);
+              return arr.length > 0 ? arr.join(',') : '-';
+            }
+            if (typeof v === 'string') {
+              const arr = normalizePreferredPhase(v);
+              return arr.length > 0 ? arr.join(',') : '-';
+            }
+            if (typeof v === 'number') {
+              return v.toString();
+            }
+            return '-';
+          },
+        },
+        { field: 'MaxConcurrent', headerName: 'Max Concurrent', editable: true, type: 'number', width: 130 },
+      ];
+    }
+    return [];
+  }, [entityType]);
+
+  const normalizePreferredPhase = (value: any): number[] => {
+    // If already an array of numbers, return as is
+    if (Array.isArray(value) && value.every(v => typeof v === 'number')) return value;
+    // If string or object with message, expand and parse
+    let str = '';
+    if (typeof value === 'string') str = value;
+    else if (typeof value === 'object' && value !== null && 'message' in value) str = value.message;
+    else if (typeof value === 'number') return [value];
+    else return [];
+    // Use expandRange to get comma-separated string, then parse numbers
+    const expanded = expandRange(str);
+    return expanded.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
   };
 
-  const data = getData().map((item, index) => {
-    if (entityType === 'clients') return { ...item, id: (item as Client).ClientID || index };
-    if (entityType === 'workers') return { ...item, id: (item as Worker).WorkerID || index };
-    if (entityType === 'tasks') return { ...item, id: (item as Task).TaskID || index };
-    return { ...item, id: index };
-  });
+  const normalizeAttributesJSON = (value: any): any => {
+    if (typeof value === 'object' && value !== null) return value;
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return { message: value };
+      }
+    }
+    return { message: String(value) };
+  };
 
-  const errors = getValidationErrors();
-  const hasErrors = errors.length > 0;
+  const onCellValueChanged = useCallback((params: any) => {
+    const updatedData = [...getRowData()];
+    const idx = updatedData.findIndex((row: any) => row.id === params.data.id);
+    if (idx !== -1) {
+      const newRow = { ...updatedData[idx], ...params.data };
+      // Normalize PreferredPhase and AttributesJSON if present
+      if ('PreferredPhase' in newRow) {
+        newRow.PreferredPhase = normalizePreferredPhase(newRow.PreferredPhase);
+      }
+      if ('AttributesJSON' in newRow) {
+        newRow.AttributesJSON = normalizeAttributesJSON(newRow.AttributesJSON);
+      }
+      updatedData[idx] = newRow;
+      setRowData(updatedData);
+    }
+  }, [getRowData, setRowData]);
+
+  const defaultColDef = useMemo(() => ({
+    flex: 1,
+    minWidth: 100,
+    resizable: true,
+    sortable: true,
+    filter: true,
+    editable: true,
+  }), []);
+
+  const rowData = getRowData();
 
   return (
-    <Box>
-      {/* NL Search Bar */}
-      <form onSubmit={handleNLSearch} style={{ marginBottom: 16 }}>
-        <Box display="flex" alignItems="center" gap={2}>
-          <Tooltip title="Type a plain English query to filter the table (e.g. 'Tasks longer than 1 phase')">
-            <input
-              type="text"
-              placeholder="Search with natural language (e.g. Tasks longer than 1 phase)"
-              value={nlQuery}
-              onChange={e => setNlQuery(e.target.value)}
-              style={{ flex: 1, padding: 8, fontSize: 16 }}
-              disabled={isSearching}
-              aria-label="Natural Language Search"
-            />
-          </Tooltip>
-          <Tooltip title="Use AI to filter the table based on your query">
-            <span>
-              <Button type="submit" variant="outlined" disabled={isSearching || !nlQuery.trim()} aria-label="NL Search">
-                {isSearching ? 'Searching...' : 'NL Search'}
-              </Button>
-            </span>
-          </Tooltip>
-          {filteredRows && (
-            <Button variant="text" color="secondary" onClick={() => { setFilteredRows(null); setNlQuery(''); }} aria-label="Clear NL Search">Clear</Button>
-          )}
-        </Box>
-      </form>
-      {/* Data Grid */}
-      <Box sx={{ height: 400, width: '100%' }}>
-        <MuiDataGrid
-          rows={filteredRows !== null ? filteredRows : data}
-          columns={getColumns()}
-          pageSizeOptions={[5, 10, 25]}
-          initialState={{
-            pagination: {
-              paginationModel: { page: 0, pageSize: 10 },
-            },
-          }}
-          disableRowSelectionOnClick
-          processRowUpdate={processRowUpdate}
-          // Remove onCellEditStop for consistency
-          sx={{
-            '& .MuiDataGrid-cell': {
-              borderBottom: '1px solid #e0e0e0',
-            },
-            '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: '#f5f5f5',
-              borderBottom: '2px solid #e0e0e0',
-            },
-          }}
-        />
-      </Box>
-
-      {/* Download Confirmation Dialog */}
-      <Dialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)}>
-        <DialogTitle>Download with Validation Errors</DialogTitle>
-        <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            There are {errors.length} validation errors in the data. 
-            This may cause issues when importing the data elsewhere.
-          </Alert>
-          <Typography variant="body2" color="text.secondary">
-            Do you want to continue with the download?
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDownloadDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={() => {
-              const data = getData();
-              const filename = `${entityType}-with-errors.csv`;
-              FileParser.exportToCSV(data as any[], filename);
-              setDownloadDialogOpen(false);
-            }} 
-            variant="contained" 
-            color="error"
-          >
-            Download Anyway
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+    <div className="ag-theme-alpine" style={{ width: '100%', height: 600 }}>
+      <AgGridReact
+        ref={gridRef}
+        rowData={rowData}
+        columnDefs={columns}
+        defaultColDef={defaultColDef}
+        stopEditingWhenCellsLoseFocus={true}
+        onCellValueChanged={onCellValueChanged}
+        domLayout="autoHeight"
+        suppressClickEdit={false}
+        singleClickEdit={true}
+        enableCellTextSelection={true}
+        suppressRowClickSelection={true}
+        suppressCellFocus={false}
+      />
+    </div>
   );
-} 
+}

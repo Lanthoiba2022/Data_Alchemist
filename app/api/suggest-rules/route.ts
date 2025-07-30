@@ -16,7 +16,58 @@ export async function POST(req: Request) {
   tasks = Array.isArray(tasks) ? tasks.slice(0, 2) : tasks;
 
   try {
-    const prompt = `You are an expert in resource allocation. Given the following data:\nClients: ${JSON.stringify(clients)}\nWorkers: ${JSON.stringify(workers)}\nTasks: ${JSON.stringify(tasks)}\n\nSuggest up to 3 useful business rules (coRun, slotRestriction, loadLimit, phaseWindow, patternMatch) that could improve scheduling. For each, output a JSON object with the following TypeScript type:\ninterface BusinessRule { id: string; type: 'coRun' | 'slotRestriction' | 'loadLimit' | 'phaseWindow' | 'patternMatch'; description: string; config: any; }\n\nReturn a JSON array of BusinessRule objects. Use a random UUID for each id. Do not include comments or explanations.`;
+    const prompt = `You are an expert in resource allocation. Given the following data:
+Clients: ${JSON.stringify(clients)}
+Workers: ${JSON.stringify(workers)}
+Tasks: ${JSON.stringify(tasks)}
+
+Suggest up to 3 useful business rules that could improve scheduling. For each rule, output a JSON object with the correct structure based on the rule type.
+
+Available rule types and their structures:
+
+1. Co-Run Rule (tasks that must run together):
+{
+  "type": "coRun",
+  "tasks": ["T1", "T2", "T3"],
+  "description": "These tasks must run together"
+}
+
+2. Slot Restriction Rule (minimum common slots for groups):
+{
+  "type": "slotRestriction", 
+  "targetGroup": "GroupA",
+  "groupType": "worker", // or "client"
+  "minCommonSlots": 2,
+  "description": "GroupA workers need at least 2 common available slots"
+}
+
+3. Load Limit Rule (maximum slots per phase for worker groups):
+{
+  "type": "loadLimit",
+  "workerGroup": "GroupA", 
+  "maxSlotsPerPhase": 3,
+  "description": "GroupA workers cannot exceed 3 slots per phase"
+}
+
+4. Phase Window Rule (allowed phases for specific tasks):
+{
+  "type": "phaseWindow",
+  "taskId": "T1",
+  "allowedPhases": [1, 2, 3],
+  "description": "Task T1 can only run in phases 1-3"
+}
+
+5. Pattern Match Rule (regex-based rules):
+{
+  "type": "patternMatch",
+  "regex": "T[0-9]+",
+  "template": "highPriority",
+  "parameters": {"priorityBoost": 1.5},
+  "description": "All tasks matching T[digits] get priority boost"
+}
+
+Return a JSON array of BusinessRule objects. Use a random UUID for each id field. Do not include comments or explanations.`;
+
     let rulesText = '';
     try {
       const completion = await openai.chat.completions.create({
@@ -25,7 +76,7 @@ export async function POST(req: Request) {
           { role: 'system', content: 'You are a helpful assistant that suggests business rules for resource allocation.' },
           { role: 'user', content: prompt },
         ],
-        max_tokens: 600,
+        max_tokens: 800,
         temperature: 0.2,
       });
       rulesText = completion.choices[0]?.message?.content?.trim() || '';

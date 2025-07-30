@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 // Input schemas (before transformation)
 export const ClientInputSchema = z.object({
+  id: z.string().optional(), // Add id field for DataGrid compatibility
   ClientID: z.string().min(1, "Client ID is required"),
   ClientName: z.string().min(1, "Client name is required"),
   PriorityLevel: z.number().min(1).max(5, "Priority must be between 1-5"),
@@ -17,6 +18,7 @@ export const ClientInputSchema = z.object({
 });
 
 export const WorkerInputSchema = z.object({
+  id: z.string().optional(), // Add id field for DataGrid compatibility
   WorkerID: z.string().min(1, "Worker ID is required"),
   WorkerName: z.string().min(1, "Worker name is required"),
   Skills: z.union([
@@ -33,6 +35,7 @@ export const WorkerInputSchema = z.object({
 });
 
 export const TaskInputSchema = z.object({
+  id: z.string().optional(), // Add id field for DataGrid compatibility
   TaskID: z.string().min(1, "Task ID is required"),
   TaskName: z.string().min(1, "Task name is required"),
   Category: z.string().min(1, "Category is required"),
@@ -50,6 +53,7 @@ export const TaskInputSchema = z.object({
 
 // Base schemas for validation (with transformations)
 export const ClientSchema = z.object({
+  id: z.string().optional(), // Add id field for DataGrid compatibility
   ClientID: z.string().min(1, "Client ID is required"),
   ClientName: z.string().min(1, "Client name is required"),
   PriorityLevel: z.number().min(1).max(5, "Priority must be between 1-5"),
@@ -73,6 +77,7 @@ export const ClientSchema = z.object({
 });
 
 export const WorkerSchema = z.object({
+  id: z.string().optional(), // Add id field for DataGrid compatibility
   WorkerID: z.string().min(1, "Worker ID is required"),
   WorkerName: z.string().min(1, "Worker name is required"),
   Skills: z.union([
@@ -97,6 +102,7 @@ export const WorkerSchema = z.object({
 });
 
 export const TaskSchema = z.object({
+  id: z.string().optional(), // Add id field for DataGrid compatibility
   TaskID: z.string().min(1, "Task ID is required"),
   TaskName: z.string().min(1, "Task name is required"),
   Category: z.string().min(1, "Category is required"),
@@ -138,21 +144,73 @@ export interface ValidationError {
   value?: any;
 }
 
-// Business rule types
-export interface BusinessRule {
-  id: string;
-  type: 'coRun' | 'slotRestriction' | 'loadLimit' | 'phaseWindow' | 'patternMatch';
+// Business rule types with proper structure
+export interface CoRunRule {
+  type: 'coRun';
+  tasks: string[];
   description: string;
-  config: any;
-  priority?: number;
 }
 
-// Priority weights
+export interface SlotRestrictionRule {
+  type: 'slotRestriction';
+  targetGroup: string;
+  groupType: 'worker' | 'client';
+  minCommonSlots: number;
+  description: string;
+}
+
+export interface LoadLimitRule {
+  type: 'loadLimit';
+  workerGroup: string;
+  maxSlotsPerPhase: number;
+  description: string;
+}
+
+export interface PhaseWindowRule {
+  type: 'phaseWindow';
+  taskId: string;
+  allowedPhases: number[];
+  description: string;
+}
+
+export interface PatternMatchRule {
+  type: 'patternMatch';
+  regex: string;
+  template: string;
+  parameters?: Record<string, any>;
+  description: string;
+}
+
+export type BusinessRule = {
+  id: string;
+  priority?: number;
+} & (CoRunRule | SlotRestrictionRule | LoadLimitRule | PhaseWindowRule | PatternMatchRule);
+
+// Priority weights with proper structure
 export interface PriorityWeights {
   clientPriority: number;
-  fulfillment: number;
-  fairness: number;
-  workload: number;
+  workerFairness: number;
+  taskUrgency: number;
+  resourceUtilization: number;
+}
+
+// Global settings for rules
+export interface GlobalSettings {
+  allowOverrides: boolean;
+  strictValidation: boolean;
+  optimizationGoal: 'balanced' | 'fulfillment' | 'fairness' | 'efficiency';
+}
+
+// Complete rules configuration
+export interface RulesConfiguration {
+  metadata: {
+    version: string;
+    createdAt: string;
+    totalRules: number;
+  };
+  businessRules: BusinessRule[];
+  prioritizationWeights: PriorityWeights;
+  globalSettings: GlobalSettings;
 }
 
 // Application state
@@ -163,6 +221,7 @@ export interface AppState {
   validationErrors: ValidationError[];
   businessRules: BusinessRule[];
   priorityWeights: PriorityWeights;
+  globalSettings: GlobalSettings;
   isLoading: boolean;
   searchQuery: string;
   uploadedFiles: {

@@ -153,7 +153,21 @@ export class FileParser {
 
   // Convert data back to CSV for export
   static exportToCSV<T>(data: T[], filename: string): void {
-    const csv = Papa.unparse(data);
+    // Stringify nested objects for CSV export
+    const processed = data.map(row => {
+      const newRow: any = { ...row };
+      Object.keys(newRow).forEach(key => {
+        if (key === 'RequestedTaskIDs' && Array.isArray(newRow[key])) {
+          newRow[key] = JSON.stringify(newRow[key]);
+        } else if (key === 'AttributesJSON' && typeof newRow[key] === 'object' && newRow[key] !== null) {
+          newRow[key] = JSON.stringify(newRow[key]);
+        } else if (typeof newRow[key] === 'object' && newRow[key] !== null) {
+          newRow[key] = JSON.stringify(newRow[key]);
+        }
+      });
+      return newRow;
+    });
+    const csv = Papa.unparse(processed);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     
