@@ -14,8 +14,8 @@
     "@mui/icons-material": "^7.2.0",
     "@mui/material": "^7.2.0",
     "@mui/x-data-grid": "^8.9.1",
-    "@supabase/supabase-js": "^2.53.0",
-    "axios": "^1.11.0",
+    "ag-grid-community": "^34.1.0",
+    "ag-grid-react": "^34.1.0",
     "file-saver": "^2.0.5",
     "next": "15.4.4",
     "openai": "^5.10.2",
@@ -23,6 +23,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hook-form": "^7.61.1",
+    "react-json-view": "^1.21.3",
     "uuid": "^9.0.1",
     "xlsx": "^0.18.5",
     "zod": "^3.25.76"

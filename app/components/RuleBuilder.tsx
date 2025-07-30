@@ -4,9 +4,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import { useData } from '../context/DataContext';
-import { BusinessRule } from '../types';
+import { BusinessRule, CoRunRule, SlotRestrictionRule, LoadLimitRule, PhaseWindowRule, PatternMatchRule } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import axios from 'axios';
 
 const RULE_TYPES = [
   { value: 'coRun', label: 'Co-Run Tasks' },
@@ -16,20 +15,20 @@ const RULE_TYPES = [
   { value: 'patternMatch', label: 'Pattern Match' },
 ];
 
-function getDefaultConfig(type: string) {
+function getDefaultRule(type: string): Partial<BusinessRule> {
   switch (type) {
     case 'coRun':
-      return { tasks: [] };
+      return { type: 'coRun', tasks: [], description: '' } as CoRunRule;
     case 'slotRestriction':
-      return { group: '', minSlots: 1 };
+      return { type: 'slotRestriction', targetGroup: '', groupType: 'worker', minCommonSlots: 1, description: '' } as SlotRestrictionRule;
     case 'loadLimit':
-      return { group: '', maxLoad: 1 };
+      return { type: 'loadLimit', workerGroup: '', maxSlotsPerPhase: 1, description: '' } as LoadLimitRule;
     case 'phaseWindow':
-      return { task: '', allowedPhases: [] };
+      return { type: 'phaseWindow', taskId: '', allowedPhases: [], description: '' } as PhaseWindowRule;
     case 'patternMatch':
-      return { regex: '', template: '' };
+      return { type: 'patternMatch', regex: '', template: '', description: '' } as PatternMatchRule;
     default:
-      return {};
+      return { type: 'coRun', tasks: [], description: '' } as CoRunRule;
   }
 }
 
@@ -39,7 +38,7 @@ export function RuleBuilder() {
   const [editRule, setEditRule] = useState<BusinessRule | null>(null);
   const [type, setType] = useState('coRun');
   const [description, setDescription] = useState('');
-  const [config, setConfig] = useState<any>(getDefaultConfig('coRun'));
+  const [ruleData, setRuleData] = useState<any>(getDefaultRule('coRun'));
   const [nlRule, setNlRule] = useState('');
   const [nlLoading, setNlLoading] = useState(false);
   const [nlError, setNlError] = useState<string | null>(null);
@@ -53,12 +52,12 @@ export function RuleBuilder() {
       setEditRule(rule);
       setType(rule.type);
       setDescription(rule.description);
-      setConfig(rule.config);
+      setRuleData(rule);
     } else {
       setEditRule(null);
       setType('coRun');
       setDescription('');
-      setConfig(getDefaultConfig('coRun'));
+      setRuleData(getDefaultRule('coRun'));
     }
     setOpen(true);
   };
@@ -68,16 +67,16 @@ export function RuleBuilder() {
     setEditRule(null);
     setType('coRun');
     setDescription('');
-    setConfig(getDefaultConfig('coRun'));
+    setRuleData(getDefaultRule('coRun'));
   };
 
   const handleSave = () => {
     const rule: BusinessRule = {
       id: editRule ? editRule.id : uuidv4(),
-      type: type as any,
+      ...ruleData,
       description,
-      config,
-    };
+    } as BusinessRule;
+    
     if (editRule) {
       dispatch({ type: 'UPDATE_BUSINESS_RULE', payload: rule });
     } else {
@@ -96,8 +95,20 @@ export function RuleBuilder() {
     setNlLoading(true);
     setNlError(null);
     try {
-      const response = await axios.post('/api/nl-rule', { description: nlRule });
-      const rule: BusinessRule = response.data.rule;
+      const response = await fetch('/api/nl-rule', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ description: nlRule }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to parse rule');
+      }
+      
+      const responseData = await response.json();
+      const rule: BusinessRule = responseData.rule;
       dispatch({ type: 'ADD_BUSINESS_RULE', payload: rule });
       setNlRule('');
     } catch (err: any) {
@@ -111,12 +122,24 @@ export function RuleBuilder() {
     setSuggestLoading(true);
     setSuggestError(null);
     try {
-      const response = await axios.post('/api/suggest-rules', {
-        clients: state.clients,
-        workers: state.workers,
-        tasks: state.tasks,
+      const response = await fetch('/api/suggest-rules', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clients: state.clients,
+          workers: state.workers,
+          tasks: state.tasks,
+        }),
       });
-      setSuggestions(response.data.rules);
+      
+      if (!response.ok) {
+        throw new Error('Failed to get suggestions');
+      }
+      
+      const responseData = await response.json();
+      setSuggestions(responseData.rules);
       setSuggestOpen(true);
     } catch (err: any) {
       setSuggestError('Failed to get suggestions.');
@@ -130,16 +153,16 @@ export function RuleBuilder() {
     setSuggestions(suggestions?.filter(r => r.id !== rule.id) || null);
   };
 
-  // Dynamic config fields based on rule type
-  const renderConfigFields = () => {
+  // Dynamic rule fields based on rule type
+  const renderRuleFields = () => {
     switch (type) {
       case 'coRun':
         return (
           <TextField
             label="Task IDs (comma-separated)"
             fullWidth
-            value={config.tasks?.join(',') || ''}
-            onChange={e => setConfig({ ...config, tasks: e.target.value.split(',').map((t: string) => t.trim()).filter((t: string) => t) })}
+            value={Array.isArray(ruleData.tasks) ? ruleData.tasks.join(',') : ''}
+            onChange={e => setRuleData({ ...ruleData, tasks: e.target.value.split(',').map((t: string) => t.trim()).filter((t: string) => t) })}
             margin="normal"
           />
         );
@@ -147,18 +170,29 @@ export function RuleBuilder() {
         return (
           <>
             <TextField
-              label="Group"
+              label="Target Group"
               fullWidth
-              value={config.group || ''}
-              onChange={e => setConfig({ ...config, group: e.target.value })}
+              value={ruleData.targetGroup || ''}
+              onChange={e => setRuleData({ ...ruleData, targetGroup: e.target.value })}
               margin="normal"
             />
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Group Type</InputLabel>
+              <Select
+                value={ruleData.groupType || 'worker'}
+                label="Group Type"
+                onChange={e => setRuleData({ ...ruleData, groupType: e.target.value })}
+              >
+                <MenuItem value="worker">Worker</MenuItem>
+                <MenuItem value="client">Client</MenuItem>
+              </Select>
+            </FormControl>
             <TextField
-              label="Min Slots"
+              label="Min Common Slots"
               type="number"
               fullWidth
-              value={config.minSlots || 1}
-              onChange={e => setConfig({ ...config, minSlots: Number(e.target.value) })}
+              value={ruleData.minCommonSlots || 1}
+              onChange={e => setRuleData({ ...ruleData, minCommonSlots: Number(e.target.value) })}
               margin="normal"
             />
           </>
@@ -167,18 +201,18 @@ export function RuleBuilder() {
         return (
           <>
             <TextField
-              label="Group"
+              label="Worker Group"
               fullWidth
-              value={config.group || ''}
-              onChange={e => setConfig({ ...config, group: e.target.value })}
+              value={ruleData.workerGroup || ''}
+              onChange={e => setRuleData({ ...ruleData, workerGroup: e.target.value })}
               margin="normal"
             />
             <TextField
-              label="Max Load"
+              label="Max Slots Per Phase"
               type="number"
               fullWidth
-              value={config.maxLoad || 1}
-              onChange={e => setConfig({ ...config, maxLoad: Number(e.target.value) })}
+              value={ruleData.maxSlotsPerPhase || 1}
+              onChange={e => setRuleData({ ...ruleData, maxSlotsPerPhase: Number(e.target.value) })}
               margin="normal"
             />
           </>
@@ -189,15 +223,15 @@ export function RuleBuilder() {
             <TextField
               label="Task ID"
               fullWidth
-              value={config.task || ''}
-              onChange={e => setConfig({ ...config, task: e.target.value })}
+              value={ruleData.taskId || ''}
+              onChange={e => setRuleData({ ...ruleData, taskId: e.target.value })}
               margin="normal"
             />
             <TextField
               label="Allowed Phases (comma-separated)"
               fullWidth
-              value={config.allowedPhases?.join(',') || ''}
-              onChange={e => setConfig({ ...config, allowedPhases: e.target.value.split(',').map((p: string) => p.trim()).filter((p: string) => p) })}
+              value={Array.isArray(ruleData.allowedPhases) ? ruleData.allowedPhases.join(',') : ''}
+              onChange={e => setRuleData({ ...ruleData, allowedPhases: e.target.value.split(',').map((p: string) => Number(p.trim())).filter((p: number) => !isNaN(p)) })}
               margin="normal"
             />
           </>
@@ -206,23 +240,54 @@ export function RuleBuilder() {
         return (
           <>
             <TextField
-              label="Regex"
+              label="Regex Pattern"
               fullWidth
-              value={config.regex || ''}
-              onChange={e => setConfig({ ...config, regex: e.target.value })}
+              value={ruleData.regex || ''}
+              onChange={e => setRuleData({ ...ruleData, regex: e.target.value })}
               margin="normal"
             />
             <TextField
               label="Template"
               fullWidth
-              value={config.template || ''}
-              onChange={e => setConfig({ ...config, template: e.target.value })}
+              value={ruleData.template || ''}
+              onChange={e => setRuleData({ ...ruleData, template: e.target.value })}
+              margin="normal"
+            />
+            <TextField
+              label="Parameters (JSON)"
+              fullWidth
+              value={ruleData.parameters ? JSON.stringify(ruleData.parameters) : '{}'}
+              onChange={e => {
+                try {
+                  const params = JSON.parse(e.target.value);
+                  setRuleData({ ...ruleData, parameters: params });
+                } catch {
+                  // Keep as string if invalid JSON
+                }
+              }}
               margin="normal"
             />
           </>
         );
       default:
         return null;
+    }
+  };
+
+  const getRuleDisplayText = (rule: BusinessRule) => {
+    switch (rule.type) {
+      case 'coRun':
+        return `Co-Run: ${rule.tasks.join(', ')}`;
+      case 'slotRestriction':
+        return `Slot Restriction: ${rule.targetGroup} (${rule.groupType}) - min ${rule.minCommonSlots} slots`;
+      case 'loadLimit':
+        return `Load Limit: ${rule.workerGroup} - max ${rule.maxSlotsPerPhase} slots/phase`;
+      case 'phaseWindow':
+        return `Phase Window: ${rule.taskId} - phases ${rule.allowedPhases.join(', ')}`;
+      case 'patternMatch':
+        return `Pattern Match: ${rule.regex} → ${rule.template}`;
+      default:
+        return (rule as any).description || 'Unknown rule type';
     }
   };
 
@@ -246,8 +311,8 @@ export function RuleBuilder() {
           {suggestions && suggestions.length > 0 ? (
             suggestions.map(rule => (
               <Box key={rule.id} mb={2} p={2} border={1} borderRadius={2} borderColor="grey.300">
-                <Typography variant="subtitle1">{rule.type}: {rule.description}</Typography>
-                <Typography variant="body2" color="text.secondary">{JSON.stringify(rule.config)}</Typography>
+                <Typography variant="subtitle1">{getRuleDisplayText(rule)}</Typography>
+                <Typography variant="body2" color="text.secondary">{rule.description}</Typography>
                 <Box mt={1} display="flex" gap={1}>
                   <Tooltip title="Add this suggested rule to your rules list">
                     <Button size="small" variant="contained" onClick={() => handleAcceptSuggestion(rule)} aria-label="Accept Suggested Rule">Accept</Button>
@@ -323,8 +388,8 @@ export function RuleBuilder() {
               </>
             }>
               <ListItemText
-                primary={`${RULE_TYPES.find(r => r.value === rule.type)?.label || rule.type}: ${rule.description}`}
-                secondary={JSON.stringify(rule.config)}
+                primary={getRuleDisplayText(rule)}
+                secondary={rule.description}
               />
             </ListItem>
           ))}
@@ -340,7 +405,7 @@ export function RuleBuilder() {
               label="Rule Type"
               onChange={e => {
                 setType(e.target.value);
-                setConfig(getDefaultConfig(e.target.value));
+                setRuleData(getDefaultRule(e.target.value));
               }}
               disabled={!!editRule}
             >
@@ -356,7 +421,7 @@ export function RuleBuilder() {
             onChange={e => setDescription(e.target.value)}
             margin="normal"
           />
-          {renderConfigFields()}
+          {renderRuleFields()}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose}>Cancel</Button>

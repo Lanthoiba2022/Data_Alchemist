@@ -11,14 +11,60 @@ export async function POST(req: Request) {
   }
 
   try {
-    const prompt = `You are an expert in resource allocation. Given the following user description of a business rule: "${description}", generate a JSON object for a rule with the following TypeScript type:\n\ninterface BusinessRule { id: string; type: 'coRun' | 'slotRestriction' | 'loadLimit' | 'phaseWindow' | 'patternMatch'; description: string; config: any; }\n\nGenerate a valid JSON object (do not include comments or explanations). Use a random UUID for the id field.`;
+    const prompt = `You are an expert in resource allocation. Given the following user description of a business rule: "${description}", generate a JSON object for a rule with the correct structure based on the rule type.
+
+Available rule types and their structures:
+
+1. Co-Run Rule (tasks that must run together):
+{
+  "type": "coRun",
+  "tasks": ["T1", "T2", "T3"],
+  "description": "These tasks must run together"
+}
+
+2. Slot Restriction Rule (minimum common slots for groups):
+{
+  "type": "slotRestriction", 
+  "targetGroup": "GroupA",
+  "groupType": "worker", // or "client"
+  "minCommonSlots": 2,
+  "description": "GroupA workers need at least 2 common available slots"
+}
+
+3. Load Limit Rule (maximum slots per phase for worker groups):
+{
+  "type": "loadLimit",
+  "workerGroup": "GroupA", 
+  "maxSlotsPerPhase": 3,
+  "description": "GroupA workers cannot exceed 3 slots per phase"
+}
+
+4. Phase Window Rule (allowed phases for specific tasks):
+{
+  "type": "phaseWindow",
+  "taskId": "T1",
+  "allowedPhases": [1, 2, 3],
+  "description": "Task T1 can only run in phases 1-3"
+}
+
+5. Pattern Match Rule (regex-based rules):
+{
+  "type": "patternMatch",
+  "regex": "T[0-9]+",
+  "template": "highPriority",
+  "parameters": {"priorityBoost": 1.5},
+  "description": "All tasks matching T[digits] get priority boost"
+}
+
+Generate a valid JSON object with the appropriate structure based on the user's description. Use a random UUID for the id field. Do not include comments or explanations.`;
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are a helpful assistant that translates natural language business rules into structured JSON.' },
+        { role: 'system', content: 'You are a helpful assistant that translates natural language business rules into structured JSON for resource allocation systems.' },
         { role: 'user', content: prompt },
       ],
-      max_tokens: 300,
+      max_tokens: 500,
       temperature: 0,
     });
     let ruleText = completion.choices[0]?.message?.content?.trim();

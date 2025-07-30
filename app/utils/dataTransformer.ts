@@ -1,5 +1,59 @@
 import { Client, Worker, Task, ClientInputSchema, WorkerInputSchema, TaskInputSchema, ClientSchema, WorkerSchema, TaskSchema } from '../types';
 
+// --- Normalization helpers ---
+function normalizeAttributesJSON(value: any): any {
+  if (typeof value === 'object' && value !== null) return value;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return { message: value };
+    }
+  }
+  return { message: String(value) };
+}
+
+function expandRangeToArray(value: string): number[] {
+  if (!value || !value.trim()) return [];
+  let v = value.trim().replace(/\[|\]/g, '');
+  // Handle comma-separated values
+  if (v.includes(',')) {
+    return v.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+  }
+  // Handle ranges like '1-2', '3 - 5', '1 -2', '1-4'
+  const rangeMatch = v.match(/^(\d+)\s*-\s*(\d+)$/);
+  if (rangeMatch) {
+    const start = parseInt(rangeMatch[1], 10);
+    const end = parseInt(rangeMatch[2], 10);
+    if (!isNaN(start) && !isNaN(end) && start <= end) {
+      return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+    }
+  }
+  // If it's a single number
+  if (/^\d+$/.test(v)) return [parseInt(v, 10)];
+  return [];
+}
+
+function normalizePreferredPhase(value: any): number[] {
+  if (Array.isArray(value) && value.every(v => typeof v === 'number')) return value;
+  if (typeof value === 'string') {
+    // Try JSON parse first
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed) && parsed.every(v => typeof v === 'number')) return parsed;
+    } catch {
+      // Not JSON, try to expand range
+      return expandRangeToArray(value);
+    }
+    return expandRangeToArray(value);
+  }
+  if (typeof value === 'object' && value !== null && 'message' in value) {
+    return expandRangeToArray(value.message);
+  }
+  if (typeof value === 'number') return [value];
+  return [];
+}
+
 export class DataTransformer {
   // Transform raw Excel data to Client objects
   static transformClients(rawData: any[]): Client[] {
@@ -10,26 +64,33 @@ export class DataTransformer {
         const clientId = row.ClientID || row['Client ID'] || row.clientid || row.client_id;
         const clientName = row.ClientName || row['Client Name'] || row.clientname || row.client_name;
         const priorityLevel = parseInt(row.PriorityLevel || row['Priority Level'] || row.prioritylevel || row.priority_level) || 1;
-        // --- FIX: Always parse RequestedTaskIDs to array ---
+        // --- STRICT FIX: Parse RequestedTaskIDs robustly ---
         let requestedTaskIds = row.RequestedTaskIDs || row['Requested Task IDs'] || row.requestedtaskids || row.requested_task_ids || '';
         if (typeof requestedTaskIds === 'string') {
-          requestedTaskIds = requestedTaskIds.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0);
+          const trimmed = requestedTaskIds.trim();
+          if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              if (Array.isArray(parsed)) {
+                requestedTaskIds = parsed.map((id: any) => String(id).trim());
+              } else {
+                requestedTaskIds = [];
+              }
+            } catch {
+              requestedTaskIds = trimmed.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0);
+            }
+          } else {
+            requestedTaskIds = trimmed.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0);
+          }
         } else if (!Array.isArray(requestedTaskIds)) {
           requestedTaskIds = [];
         }
         const groupTag = row.GroupTag || row['Group Tag'] || row.grouptag || row.group_tag;
-        // --- FIX: Always parse AttributesJSON to object ---
+        // --- STRICT FIX: Parse AttributesJSON robustly ---
         let attributesJson = row.AttributesJSON || row['Attributes JSON'] || row.attributesjson || row.attributes_json || '{}';
-        if (typeof attributesJson === 'string') {
-          try {
-            attributesJson = JSON.parse(attributesJson);
-          } catch {
-            attributesJson = {};
-          }
-        } else if (typeof attributesJson !== 'object' || attributesJson === null) {
-          attributesJson = {};
-        }
+        attributesJson = normalizeAttributesJSON(attributesJson);
         const clientData = {
+          id: clientId || `client_${index}`, // Add unique id for DataGrid
           ClientID: clientId,
           ClientName: clientName,
           PriorityLevel: priorityLevel,
@@ -40,7 +101,7 @@ export class DataTransformer {
         const inputResult = ClientInputSchema.safeParse(clientData);
         if (inputResult.success) {
           const result = ClientSchema.parse(inputResult.data);
-          transformedClients.push(result);
+          transformedClients.push({ ...result, id: clientData.id });
         }
       } catch (error) {
         console.warn(`Failed to transform client at row ${index + 1}:`, error);
@@ -81,6 +142,7 @@ export class DataTransformer {
         const workerGroup = row.WorkerGroup || row['Worker Group'] || row.workergroup || row.worker_group;
         const qualificationLevel = parseInt(row.QualificationLevel || row['Qualification Level'] || row.qualificationlevel || row.qualification_level) || 1;
         const workerData = {
+          id: workerId || `worker_${index}`, // Add unique id for DataGrid
           WorkerID: workerId,
           WorkerName: workerName,
           Skills: skills,
@@ -92,7 +154,7 @@ export class DataTransformer {
         const inputResult = WorkerInputSchema.safeParse(workerData);
         if (inputResult.success) {
           const result = WorkerSchema.parse(inputResult.data);
-          transformedWorkers.push(result);
+          transformedWorkers.push({ ...result, id: workerData.id });
         }
       } catch (error) {
         console.warn(`Failed to transform worker at row ${index + 1}:`, error);
@@ -121,18 +183,10 @@ export class DataTransformer {
         }
         // --- FIX: Always parse PreferredPhase to array ---
         let preferredPhase = row.PreferredPhase || row['Preferred Phase'] || row.preferredphase || row.preferred_phase || '[]';
-        if (typeof preferredPhase === 'string') {
-          try {
-            preferredPhase = JSON.parse(preferredPhase);
-            if (!Array.isArray(preferredPhase)) preferredPhase = [];
-          } catch {
-            preferredPhase = [];
-          }
-        } else if (!Array.isArray(preferredPhase)) {
-          preferredPhase = [];
-        }
+        preferredPhase = normalizePreferredPhase(preferredPhase);
         const maxConcurrent = parseInt(row.MaxConcurrent || row['Max Concurrent'] || row.maxconcurrent || row.max_concurrent) || 1;
         const taskData = {
+          id: taskId || `task_${index}`, // Add unique id for DataGrid
           TaskID: taskId,
           TaskName: taskName,
           Category: category,
@@ -144,7 +198,7 @@ export class DataTransformer {
         const inputResult = TaskInputSchema.safeParse(taskData);
         if (inputResult.success) {
           const result = TaskSchema.parse(inputResult.data);
-          transformedTasks.push(result);
+          transformedTasks.push({ ...result, id: taskData.id });
         }
       } catch (error) {
         console.warn(`Failed to transform task at row ${index + 1}:`, error);

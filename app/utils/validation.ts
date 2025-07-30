@@ -24,7 +24,24 @@ export class DataValidator {
     // Validate cross-entity relationships
     errors.push(...this.validateCrossEntityRelationships());
     
-    return errors;
+    // After collecting all errors, group by rowIndex and field
+    const grouped: { [key: string]: ValidationError } = {};
+    for (const err of errors) {
+      const key = `${err.entity}-${err.rowIndex}-${err.field}`;
+      if (!grouped[key]) {
+        grouped[key] = { ...err, message: err.message };
+      } else {
+        grouped[key].message += `; ${err.message}`;
+        if (Array.isArray(grouped[key].value)) {
+          grouped[key].value.push(err.value);
+        } else if (grouped[key].value !== undefined) {
+          grouped[key].value = [grouped[key].value, err.value];
+        } else {
+          grouped[key].value = err.value;
+        }
+      }
+    }
+    return Object.values(grouped);
   }
 
   private validateClients(): ValidationError[] {
@@ -326,7 +343,62 @@ export class DataValidator {
       }
     });
 
+    // Validate phase-slot saturation
+    this.validatePhaseSlotSaturation(errors);
+    
+    // Validate max-concurrency feasibility
+    this.validateMaxConcurrencyFeasibility(errors);
+
     return errors;
+  }
+
+  // Validate phase-slot saturation
+  private validatePhaseSlotSaturation(errors: ValidationError[]): void {
+    // Get all phases from worker available slots
+    const allPhases = new Set<number>();
+    this.workers.forEach(worker => {
+      if (Array.isArray(worker.AvailableSlots)) {
+        worker.AvailableSlots.forEach(slot => allPhases.add(slot));
+      }
+    });
+
+    // Check if any task duration exceeds total available slots in any phase
+    this.tasks.forEach((task, taskIndex) => {
+      if (task.Duration > allPhases.size) {
+        errors.push({
+          entity: 'task',
+          rowIndex: taskIndex,
+          field: 'Duration',
+          message: `Task duration (${task.Duration}) exceeds total available phases (${allPhases.size})`,
+          value: task.Duration
+        });
+      }
+    });
+  }
+
+  // Validate max-concurrency feasibility
+  private validateMaxConcurrencyFeasibility(errors: ValidationError[]): void {
+    this.tasks.forEach((task, taskIndex) => {
+      // Count workers with required skills
+      const qualifiedWorkers = this.workers.filter(worker => {
+        if (!Array.isArray(worker.Skills) || !Array.isArray(task.RequiredSkills)) {
+          return false;
+        }
+        return task.RequiredSkills.every(skill => 
+          worker.Skills.includes(skill)
+        );
+      });
+
+      if (qualifiedWorkers.length < task.MaxConcurrent) {
+        errors.push({
+          entity: 'task',
+          rowIndex: taskIndex,
+          field: 'MaxConcurrent',
+          message: `Max concurrent (${task.MaxConcurrent}) exceeds qualified workers (${qualifiedWorkers.length})`,
+          value: task.MaxConcurrent
+        });
+      }
+    });
   }
 
   // Validate a single entity (for inline editing)

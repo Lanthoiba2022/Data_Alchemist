@@ -13,13 +13,19 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Button
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert
 } from '@mui/material';
-import { Error, Warning, CheckCircle, ExpandMore } from '@mui/icons-material';
+import { Error as ErrorIcon, Warning, CheckCircle, ExpandMore } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import { ValidationError } from '../types';
-import axios from 'axios';
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
+const ReactJson = dynamic(() => import('react-json-view'), { ssr: false });
 
 export function ValidationSummary() {
   const { state, dispatch } = useData();
@@ -55,7 +61,7 @@ export function ValidationSummary() {
   };
 
   const getErrorIcon = (error: ValidationError) => {
-    return <Error color="error" />;
+    return <ErrorIcon color="error" />;
   };
 
   const getErrorSeverity = (error: ValidationError) => {
@@ -73,14 +79,26 @@ export function ValidationSummary() {
     setSuggesting((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: true }));
     setSuggestError((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: '' }));
     try {
-      const response = await axios.post('/api/ai-suggest-fix', {
-        error,
-        row,
-        entityType: entity,
+      const response = await fetch('/api/ai-suggest-fix', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          error,
+          row,
+          entityType: entity,
+        }),
       });
-      setSuggestedFixes((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: response.data.fixedRow }));
-    } catch {
-      setSuggestError((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: 'AI suggestion failed.' }));
+      
+      if (!response.ok) {
+        throw new Error('AI suggestion failed');
+      }
+      
+      const responseData = await response.json();
+      setSuggestedFixes((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: responseData.fixedRow }));
+    } catch (e: any) {
+      setSuggestError((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: e?.message || 'AI suggestion failed.' }));
     } finally {
       setSuggesting((prev) => ({ ...prev, [entity + error.rowIndex + error.field]: false }));
     }
@@ -137,7 +155,7 @@ export function ValidationSummary() {
         <Box sx={{ display: 'flex', gap: 1 }}>
           {getErrorCount() > 0 && (
             <Chip 
-              icon={<Error />} 
+              icon={<ErrorIcon />} 
               label={`${getErrorCount()} Errors`} 
               color="error" 
               size="small" 
@@ -187,7 +205,7 @@ export function ValidationSummary() {
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                    <Error color="error" />
+                    <ErrorIcon color="error" />
                     <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
                       {getEntityDisplayName(entity)} ({errors.length} errors)
                     </Typography>
@@ -202,14 +220,18 @@ export function ValidationSummary() {
                         </ListItemIcon>
                         <ListItemText
                           primary={
-                            <Typography variant="body2">
-                              Row {error.rowIndex + 1}, {error.field}: {error.message}
-                            </Typography>
+                            <>
+                              <Typography variant="body2" color="error" sx={{ display: 'inline' }}>
+                                {error.message.split(';').map((msg, i) => (
+                                  <span key={i}>{msg.trim()}{i < error.message.split(';').length - 1 ? ', ' : ''}</span>
+                                ))}
+                              </Typography>
+                            </>
                           }
                           secondary={
                             error.value && (
                               <Typography variant="caption" color="text.secondary">
-                                Value: {String(error.value)}
+                                Value: {Array.isArray(error.value) ? error.value.join(', ') : String(error.value)}
                               </Typography>
                             )
                           }
@@ -228,14 +250,26 @@ export function ValidationSummary() {
                             <Typography color="error" variant="caption">{suggestError[entity + error.rowIndex + error.field]}</Typography>
                           )}
                           {suggestedFixes[entity + error.rowIndex + error.field] && (
-                            <Button
-                              size="small"
-                              variant="contained"
-                              color="success"
-                              onClick={() => handleApplyFix(entity, error.rowIndex, suggestedFixes[entity + error.rowIndex + error.field])}
-                            >
-                              Apply Fix
-                            </Button>
+                            <Box sx={{ mt: 1, mb: 1, p: 1, background: '#f5f5f5', borderRadius: 1 }}>
+                              <Typography variant="caption" color="primary">Suggested Fix:</Typography>
+                              <ReactJson
+                                src={suggestedFixes[entity + error.rowIndex + error.field]}
+                                name={false}
+                                collapsed={false}
+                                enableClipboard={false}
+                                displayDataTypes={false}
+                                style={{ fontSize: '0.8em', background: 'none' }}
+                              />
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                sx={{ mt: 1 }}
+                                onClick={() => handleApplyFix(entity, error.rowIndex, suggestedFixes[entity + error.rowIndex + error.field])}
+                              >
+                                Apply Fix
+                              </Button>
+                            </Box>
                           )}
                         </Box>
                       </ListItem>
