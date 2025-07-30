@@ -66,7 +66,7 @@ export class FileParser {
           const dataObjects = rows.map((row, index) => {
             const obj: any = {};
             headers.forEach((header, colIndex) => {
-              obj[header] = row[colIndex] || '';
+              obj[header] = row[colIndex] !== undefined ? row[colIndex] : '';
             });
             return obj;
           });

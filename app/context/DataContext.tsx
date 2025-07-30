@@ -52,8 +52,11 @@ const initialState: AppState = {
 
 // Reducer function
 function dataReducer(state: AppState, action: Action): AppState {
+  console.log('🔄 DataContext reducer called with action:', action.type, 'payload:', 'payload' in action ? action.payload : 'no payload');
+  
   switch (action.type) {
     case 'SET_CLIENTS':
+      console.log('👥 DataContext: Setting clients:', action.payload);
       return {
         ...state,
         clients: action.payload,
@@ -61,6 +64,12 @@ function dataReducer(state: AppState, action: Action): AppState {
       };
 
     case 'SET_WORKERS':
+      console.log('👷 DataContext: Setting workers:', action.payload);
+      if (action.payload.length > 0) {
+        action.payload.forEach((worker, index) => {
+          console.log(`👷 DataContext: Worker ${index + 1} MaxLoadPerPh:`, worker.MaxLoadPerPh);
+        });
+      }
       return {
         ...state,
         workers: action.payload,
@@ -68,6 +77,14 @@ function dataReducer(state: AppState, action: Action): AppState {
       };
 
     case 'SET_TASKS':
+      console.log('📋 DataContext: Setting tasks:', action.payload);
+      if (action.payload.length > 0) {
+        action.payload.forEach((task, index) => {
+          console.log(`📋 DataContext: Task ${index + 1} PreferredPhase:`, task.PreferredPhase);
+          console.log(`📋 DataContext: Task ${index + 1} PreferredPhase type:`, typeof task.PreferredPhase);
+          console.log(`📋 DataContext: Task ${index + 1} PreferredPhase is array:`, Array.isArray(task.PreferredPhase));
+        });
+      }
       return {
         ...state,
         tasks: action.payload,
@@ -95,6 +112,7 @@ function dataReducer(state: AppState, action: Action): AppState {
     case 'UPDATE_TASK':
       const updatedTasks = [...state.tasks];
       updatedTasks[action.payload.index] = action.payload.task;
+      console.log('📋 DataContext: Updated task PreferredPhase:', action.payload.task.PreferredPhase);
       return {
         ...state,
         tasks: updatedTasks,
@@ -152,6 +170,7 @@ function dataReducer(state: AppState, action: Action): AppState {
       };
 
     case 'SET_FILE_UPLOADED':
+      console.log('📁 DataContext: File uploaded for:', action.payload);
       return {
         ...state,
         uploadedFiles: {
@@ -161,6 +180,7 @@ function dataReducer(state: AppState, action: Action): AppState {
       };
 
     case 'CLEAR_ALL_DATA':
+      console.log('🗑️ DataContext: Clearing all data');
       return initialState;
 
     default:

@@ -113,16 +113,7 @@ export const TaskSchema = z.object({
     ),
     z.array(z.string())
   ]),
-  PreferredPhase: z.union([
-    z.string().transform((str) => {
-      try {
-        return JSON.parse(str);
-      } catch {
-        return [];
-      }
-    }),
-    z.array(z.number())
-  ]),
+  PreferredPhase: z.array(z.number()),
   MaxConcurrent: z.number().min(1, "Max concurrent must be at least 1"),
 });
 
