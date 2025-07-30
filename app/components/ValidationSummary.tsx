@@ -220,13 +220,29 @@ export function ValidationSummary() {
                         </ListItemIcon>
                         <ListItemText
                           primary={
-                            <>
+                            <React.Fragment>
                               <Typography variant="body2" color="error" sx={{ display: 'inline' }}>
                                 {error.message.split(';').map((msg, i) => (
                                   <span key={i}>{msg.trim()}{i < error.message.split(';').length - 1 ? ', ' : ''}</span>
                                 ))}
                               </Typography>
-                            </>
+                              {/* Show the full row details for this error */}
+                              <Box sx={{ mt: 1, mb: 1, p: 1, background: '#f9f9f9', borderRadius: 1 }}>
+                                <Typography variant="caption" color="text.secondary">Row Data:</Typography>
+                                <ReactJson
+                                  src={
+                                    entity === 'client' ? state.clients[error.rowIndex] :
+                                    entity === 'worker' ? state.workers[error.rowIndex] :
+                                    state.tasks[error.rowIndex]
+                                  }
+                                  name={false}
+                                  collapsed={false}
+                                  enableClipboard={false}
+                                  displayDataTypes={false}
+                                  style={{ fontSize: '0.8em', background: 'none' }}
+                                />
+                              </Box>
+                            </React.Fragment>
                           }
                           secondary={
                             error.value && (

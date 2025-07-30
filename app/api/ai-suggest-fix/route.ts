@@ -9,16 +9,16 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: 'Missing error, row, or entityType' }), { status: 400 });
   }
 
-  // Ensure row is serializable (convert nested objects to JSON strings)
+  // Remove stringification of nested objects/arrays
   const safeRow = { ...row };
-  Object.keys(safeRow).forEach(key => {
-    if (typeof safeRow[key] === 'object' && safeRow[key] !== null) {
-      safeRow[key] = JSON.stringify(safeRow[key]);
-    }
-  });
+  // Object.keys(safeRow).forEach(key => {
+  //   if (typeof safeRow[key] === 'object' && safeRow[key] !== null) {
+  //     safeRow[key] = JSON.stringify(safeRow[key]);
+  //   }
+  // });
 
   try {
-    const prompt = `You are a data cleaning assistant. Given the following row of a ${entityType} and a validation error, suggest a corrected value for the field.\n\nRow: ${JSON.stringify(safeRow)}\nError: ${JSON.stringify(error)}\n\nReturn the corrected row as a JSON object. Only fix the field in error, leave other fields unchanged.`;
+    const prompt = `You are a data cleaning assistant. Given the following row of a ${entityType} and a validation error, suggest a corrected value for the field.\n\nRow: ${JSON.stringify(safeRow)}\nError: ${JSON.stringify(error)}\n\nReturn the corrected row as a JSON object, preserving the original data types (arrays as arrays, objects as objects, booleans as booleans, etc). Do NOT stringify arrays or objects. Only fix the field in error, leave other fields unchanged.`;
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
