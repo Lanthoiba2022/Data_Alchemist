@@ -18,7 +18,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Alert
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import { Error as ErrorIcon, Warning, CheckCircle, ExpandMore } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
@@ -258,9 +259,45 @@ export function ValidationSummary() {
                             variant="outlined"
                             onClick={() => handleSuggestFix(entity, error, (entity === 'client' ? state.clients : entity === 'worker' ? state.workers : state.tasks)[error.rowIndex])}
                             disabled={suggesting[entity + error.rowIndex + error.field]}
-                            sx={{ mr: 1 }}
+                            sx={{ 
+                              mr: 1,
+                              minWidth: 120,
+                              position: 'relative',
+                              ...(suggesting[entity + error.rowIndex + error.field] && {
+                                borderColor: '#ff9800',
+                                background: 'rgba(255, 152, 0, 0.04)',
+                                animation: 'pulse 1.5s ease-in-out infinite',
+                                '@keyframes pulse': {
+                                  '0%': { opacity: 1 },
+                                  '50%': { opacity: 0.7 },
+                                  '100%': { opacity: 1 },
+                                },
+                              })
+                            }}
                           >
-                            {suggesting[entity + error.rowIndex + error.field] ? 'Suggesting...' : 'Suggest Fix'}
+                            {suggesting[entity + error.rowIndex + error.field] && (
+                              <CircularProgress 
+                                size={14} 
+                                sx={{ 
+                                  color: '#ff9800', 
+                                  mr: 1,
+                                  position: 'absolute',
+                                  left: '50%',
+                                  top: '50%',
+                                  transform: 'translate(-50%, -50%)',
+                                  zIndex: 1
+                                }} 
+                              />
+                            )}
+                            <Box sx={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: 1,
+                              opacity: suggesting[entity + error.rowIndex + error.field] ? 0 : 1,
+                              transition: 'opacity 0.3s'
+                            }}>
+                              {suggesting[entity + error.rowIndex + error.field] ? 'Suggesting...' : 'Suggest Fix'}
+                            </Box>
                           </Button>
                           {suggestError[entity + error.rowIndex + error.field] && (
                             <Typography color="error" variant="caption">{suggestError[entity + error.rowIndex + error.field]}</Typography>

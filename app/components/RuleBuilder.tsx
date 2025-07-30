@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Button, Typography, Paper, List, ListItem, ListItemText, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Select, FormControl, InputLabel, Tooltip } from '@mui/material';
+import { Box, Button, Typography, Paper, List, ListItem, ListItemText, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Select, FormControl, InputLabel, Tooltip, CircularProgress } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
@@ -111,6 +111,13 @@ export function RuleBuilder() {
   const handleNLRule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nlRule.trim()) return;
+    
+    // Check if all required files are uploaded
+    if (!state.uploadedFiles.clients || !state.uploadedFiles.workers || !state.uploadedFiles.tasks) {
+      setNlError('Please upload all required files (clients, workers, and tasks) before using this feature.');
+      return;
+    }
+    
     setNlLoading(true);
     setNlError(null);
     try {
@@ -141,6 +148,12 @@ export function RuleBuilder() {
   };
 
   const handleSuggestRules = async () => {
+    // Check if all required files are uploaded
+    if (!state.uploadedFiles.clients || !state.uploadedFiles.workers || !state.uploadedFiles.tasks) {
+      setSuggestError('Please upload all required files (clients, workers, and tasks) before using this feature.');
+      return;
+    }
+    
     setSuggestLoading(true);
     setSuggestError(null);
     try {
@@ -317,14 +330,85 @@ export function RuleBuilder() {
     <Box>
       {/* Suggest Rules Button */}
       <Box mb={2} display="flex" alignItems="center" gap={2}>
-        <Tooltip title="Let AI analyze your data and suggest useful business rules">
+        <Tooltip title={
+          !state.uploadedFiles.clients || !state.uploadedFiles.workers || !state.uploadedFiles.tasks
+            ? "Please upload all required files (clients, workers, and tasks) first"
+            : "Let AI analyze your data and suggest useful business rules"
+        }>
           <span>
-            <Button variant="contained" color="secondary" onClick={handleSuggestRules} disabled={suggestLoading} aria-label="Suggest Rules">
-              {suggestLoading ? 'Suggesting...' : 'Suggest Rules'}
+            <Button 
+              variant="contained" 
+              color="secondary" 
+              onClick={handleSuggestRules} 
+              disabled={suggestLoading || !state.uploadedFiles.clients || !state.uploadedFiles.workers || !state.uploadedFiles.tasks} 
+              aria-label="Suggest Rules"
+              sx={{
+                minWidth: 160,
+                height: 48,
+                position: 'relative',
+                ...(suggestLoading && {
+                  background: 'linear-gradient(45deg, #9c27b0 30%, #e1bee7 90%)',
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                  '@keyframes pulse': {
+                    '0%': { opacity: 1 },
+                    '50%': { opacity: 0.7 },
+                    '100%': { opacity: 1 },
+                  },
+                })
+              }}
+            >
+              {suggestLoading && (
+                <CircularProgress 
+                  size={20} 
+                  sx={{ 
+                    color: 'white', 
+                    mr: 1,
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    zIndex: 1
+                  }} 
+                />
+              )}
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 1,
+                opacity: suggestLoading ? 0 : 1,
+                transition: 'opacity 0.3s'
+              }}>
+                {suggestLoading ? 'Suggesting...' : 'Suggest Rules'}
+              </Box>
             </Button>
           </span>
         </Tooltip>
+        {suggestLoading && (
+          <Typography variant="body2" color="primary" sx={{ fontStyle: 'italic' }}>
+            AI is analyzing your data...
+          </Typography>
+        )}
         {suggestError && <Typography color="error" variant="body2">{suggestError}</Typography>}
+        {(!state.uploadedFiles.clients || !state.uploadedFiles.workers || !state.uploadedFiles.tasks) && (
+          <Box display="flex" alignItems="center" gap={1}>
+            <Typography variant="body2" color="warning.main" sx={{ fontStyle: 'italic' }}>
+              Missing files: 
+            </Typography>
+            {!state.uploadedFiles.clients && (
+              <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>Clients</Typography>
+            )}
+            {!state.uploadedFiles.workers && (
+              <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+                {!state.uploadedFiles.clients ? ', ' : ''}Workers
+              </Typography>
+            )}
+            {!state.uploadedFiles.tasks && (
+              <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+                {(!state.uploadedFiles.clients || !state.uploadedFiles.workers) ? ', ' : ''}Tasks
+              </Typography>
+            )}
+          </Box>
+        )}
       </Box>
       {/* Suggestions Modal */}
       <Dialog open={suggestOpen} onClose={() => setSuggestOpen(false)} maxWidth="sm" fullWidth>
@@ -360,37 +444,113 @@ export function RuleBuilder() {
             Add Rule by Description (Natural Language)
           </Typography>
           <Box display="flex" gap={2} alignItems="center">
-            <Tooltip title="Describe a rule in plain English (e.g. 'Task T1 and T3 must co-run')">
-              <textarea
-                value={nlRule}
-                onChange={e => setNlRule(e.target.value)}
-                placeholder={placeholders[placeholderIndex]}
-                rows={1}
-                style={{
-                  flex: 1,
-                  fontSize: 18,
-                  padding: 14,
-                  border: '2px solid #1976d2',
-                  borderRadius: 8,
-                  background: '#f5faff',
-                  boxShadow: '0 2px 8px rgba(25, 118, 210, 0.08)',
-                  outline: 'none',
-                  resize: 'vertical',
-                  color: '#222',
-                  transition: 'border 0.2s',
-                  maxHeight: 48,
-                  minHeight: 32,
-                }}
-                disabled={nlLoading}
-                aria-label="Natural Language Rule Input"
-                onFocus={e => (e.target.style.border = '2px solid #1565c0')}
-                onBlur={e => (e.target.style.border = '2px solid #1976d2')}
-              />
-            </Tooltip>
-            <Tooltip title="Use AI to convert your description into a structured rule">
+            <Box sx={{ position: 'relative', flex: 1 }}>
+              <Tooltip title="">
+                <textarea
+                  value={nlRule}
+                  onChange={e => setNlRule(e.target.value)}
+                  placeholder={nlLoading ? "Processing your rule..." : placeholders[placeholderIndex]}
+                  rows={1}
+                  style={{
+                    width: '100%',
+                    fontSize: 18,
+                    padding: 14,
+                    border: nlLoading ? '2px solid #ff9800' : '2px solid #1976d2',
+                    borderRadius: 8,
+                    background: nlLoading ? '#fff3e0' : '#f5faff',
+                    boxShadow: nlLoading ? '0 2px 8px rgba(255, 152, 0, 0.2)' : '0 2px 8px rgba(25, 118, 210, 0.08)',
+                    outline: 'none',
+                    resize: 'vertical',
+                    color: '#222',
+                    transition: 'all 0.3s ease',
+                    maxHeight: 48,
+                    minHeight: 32,
+                    opacity: nlLoading ? 0.8 : 1,
+                  }}
+                  disabled={nlLoading}
+                  aria-label="Natural Language Rule Input"
+                  onFocus={e => {
+                    if (!nlLoading) {
+                      e.target.style.border = '2px solid #1565c0';
+                    }
+                  }}
+                  onBlur={e => {
+                    if (!nlLoading) {
+                      e.target.style.border = '2px solid #1976d2';
+                    }
+                  }}
+                />
+              </Tooltip>
+              {nlLoading && (
+                <Box sx={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1
+                }}>
+                  <CircularProgress size={16} sx={{ color: '#ff9800' }} />
+                  <Typography variant="caption" sx={{ color: '#ff9800', fontWeight: 500 }}>
+                    Processing...
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+            <Tooltip title={
+              !state.uploadedFiles.clients || !state.uploadedFiles.workers || !state.uploadedFiles.tasks
+                ? "Please upload all required files (clients, workers, and tasks) first"
+                : "Use AI to convert your description into a structured rule"
+            }>
               <span>
-                <Button type="submit" variant="outlined" disabled={nlLoading || !nlRule.trim()} aria-label="Add NL Rule">
-                  {nlLoading ? 'Adding...' : 'Add NL Rule'}
+                <Button 
+                  type="submit" 
+                  variant="outlined" 
+                  disabled={nlLoading || !nlRule.trim() || !state.uploadedFiles.clients || !state.uploadedFiles.workers || !state.uploadedFiles.tasks} 
+                  aria-label="Add NL Rule"
+                  sx={{
+                    minWidth: 140,
+                    height: 48,
+                    position: 'relative',
+                    borderWidth: nlLoading ? 2 : 1,
+                    opacity: (!state.uploadedFiles.clients || !state.uploadedFiles.workers || !state.uploadedFiles.tasks) ? 0.6 : 1,
+                    cursor: (!state.uploadedFiles.clients || !state.uploadedFiles.workers || !state.uploadedFiles.tasks) ? 'not-allowed' : 'pointer',
+                    ...(nlLoading && {
+                      borderColor: '#1976d2',
+                      background: 'rgba(25, 118, 210, 0.04)',
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                      '@keyframes pulse': {
+                        '0%': { opacity: 1 },
+                        '50%': { opacity: 0.7 },
+                        '100%': { opacity: 1 },
+                      },
+                    })
+                  }}
+                >
+                  {nlLoading && (
+                    <CircularProgress 
+                      size={20} 
+                      sx={{ 
+                        color: '#1976d2', 
+                        mr: 1,
+                        position: 'absolute',
+                        left: '50%',
+                        top: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        zIndex: 1
+                      }} 
+                    />
+                  )}
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 1,
+                    opacity: nlLoading ? 0 : 1,
+                    transition: 'opacity 0.3s'
+                  }}>
+                    {nlLoading ? 'Adding...' : 'Add NL Rule'}
+                  </Box>
                 </Button>
               </span>
             </Tooltip>

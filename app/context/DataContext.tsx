@@ -21,7 +21,10 @@ type Action =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_SEARCH_QUERY'; payload: string }
   | { type: 'SET_FILE_UPLOADED'; payload: 'clients' | 'workers' | 'tasks' }
-  | { type: 'CLEAR_ALL_DATA' };
+  | { type: 'CLEAR_ALL_DATA' }
+  | { type: 'CLEAR_CLIENTS_DATA' }
+  | { type: 'CLEAR_WORKERS_DATA' }
+  | { type: 'CLEAR_TASKS_DATA' };
 
 // Initial state
 const initialState: AppState = {
@@ -182,6 +185,42 @@ function dataReducer(state: AppState, action: Action): AppState {
     case 'CLEAR_ALL_DATA':
       console.log('🗑️ DataContext: Clearing all data');
       return initialState;
+
+    case 'CLEAR_CLIENTS_DATA':
+      console.log('🗑️ DataContext: Clearing clients data');
+      return {
+        ...state,
+        clients: [],
+        uploadedFiles: {
+          ...state.uploadedFiles,
+          clients: false,
+        },
+        validationErrors: new DataValidator([], state.workers, state.tasks).validateAll(),
+      };
+
+    case 'CLEAR_WORKERS_DATA':
+      console.log('🗑️ DataContext: Clearing workers data');
+      return {
+        ...state,
+        workers: [],
+        uploadedFiles: {
+          ...state.uploadedFiles,
+          workers: false,
+        },
+        validationErrors: new DataValidator(state.clients, [], state.tasks).validateAll(),
+      };
+
+    case 'CLEAR_TASKS_DATA':
+      console.log('🗑️ DataContext: Clearing tasks data');
+      return {
+        ...state,
+        tasks: [],
+        uploadedFiles: {
+          ...state.uploadedFiles,
+          tasks: false,
+        },
+        validationErrors: new DataValidator(state.clients, state.workers, []).validateAll(),
+      };
 
     default:
       return state;

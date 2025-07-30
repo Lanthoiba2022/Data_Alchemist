@@ -20,11 +20,22 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Clear all data handler
-  const handleClearAll = () => {
-    localStorage.removeItem('dataAlchemistState');
-    dispatch({ type: 'CLEAR_ALL_DATA' });
-    setSuccess('All data cleared.');
+  // Clear specific data handler
+  const handleClearData = () => {
+    switch (entityType) {
+      case 'clients':
+        dispatch({ type: 'CLEAR_CLIENTS_DATA' });
+        setSuccess('All clients data cleared.');
+        break;
+      case 'workers':
+        dispatch({ type: 'CLEAR_WORKERS_DATA' });
+        setSuccess('All workers data cleared.');
+        break;
+      case 'tasks':
+        dispatch({ type: 'CLEAR_TASKS_DATA' });
+        setSuccess('All tasks data cleared.');
+        break;
+    }
     setError(null);
   };
 
@@ -354,10 +365,10 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
         <Button
           variant="outlined"
           color="error"
-          onClick={handleClearAll}
+          onClick={handleClearData}
           disabled={isUploading}
         >
-          Clear All Data
+          Clear All {getEntityDisplayName()} Data
         </Button>
       </Stack>
       <Typography variant="body2" color="text.secondary" mb={1}>
