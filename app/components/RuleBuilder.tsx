@@ -46,6 +46,25 @@ export function RuleBuilder() {
   const [suggestions, setSuggestions] = useState<BusinessRule[] | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+
+  // Rotating placeholders for NL rule input
+  const placeholders = [
+    "e.g. Any task that can be co-run",
+    "e.g. Any task that can only run in phases",
+    "e.g. Any task that cannot exceed a load limit per phase",
+    "e.g. Any task that needs common slots with other tasks",
+    "e.g. Any task that needs to match a pattern",
+    "e.g. Any task that needs to be restricted to a slot"
+  ];
+
+  // Rotate placeholders every 3 seconds
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [placeholders.length]);
 
   const handleOpen = (rule?: BusinessRule) => {
     if (rule) {
@@ -100,13 +119,16 @@ export function RuleBuilder() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ description: nlRule }),
+        body: JSON.stringify({
+          description: nlRule,
+          clients: state.clients,
+          workers: state.workers,
+          tasks: state.tasks,
+        }),
       });
-      
       if (!response.ok) {
         throw new Error('Failed to parse rule');
       }
-      
       const responseData = await response.json();
       const rule: BusinessRule = responseData.rule;
       dispatch({ type: 'ADD_BUSINESS_RULE', payload: rule });
@@ -342,17 +364,33 @@ export function RuleBuilder() {
               <textarea
                 value={nlRule}
                 onChange={e => setNlRule(e.target.value)}
-                placeholder="e.g. Task T1 and T3 must co-run"
-                rows={2}
-                style={{ flex: 1, fontSize: 16, padding: 8 }}
+                placeholder={placeholders[placeholderIndex]}
+                rows={1}
+                style={{
+                  flex: 1,
+                  fontSize: 18,
+                  padding: 14,
+                  border: '2px solid #1976d2',
+                  borderRadius: 8,
+                  background: '#f5faff',
+                  boxShadow: '0 2px 8px rgba(25, 118, 210, 0.08)',
+                  outline: 'none',
+                  resize: 'vertical',
+                  color: '#222',
+                  transition: 'border 0.2s',
+                  maxHeight: 48,
+                  minHeight: 32,
+                }}
                 disabled={nlLoading}
                 aria-label="Natural Language Rule Input"
+                onFocus={e => (e.target.style.border = '2px solid #1565c0')}
+                onBlur={e => (e.target.style.border = '2px solid #1976d2')}
               />
             </Tooltip>
             <Tooltip title="Use AI to convert your description into a structured rule">
               <span>
                 <Button type="submit" variant="outlined" disabled={nlLoading || !nlRule.trim()} aria-label="Add NL Rule">
-                  {nlLoading ? 'Parsing...' : 'Add NL Rule'}
+                  {nlLoading ? 'Adding...' : 'Add NL Rule'}
                 </Button>
               </span>
             </Tooltip>
