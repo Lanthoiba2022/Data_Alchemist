@@ -5,6 +5,7 @@ import { AgGridReact } from 'ag-grid-react';
 import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { useData } from '../context/DataContext';
+import { normalizePreferredPhase } from '../utils/dataTransformer';
 
 // Register AG Grid modules
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -75,6 +76,80 @@ class ArrayEditor implements ICellEditor {
   }
 
   destroy(): void {
+    // cleanup if needed
+  }
+
+  isPopup(): boolean {
+    return false;
+  }
+}
+
+// Custom PreferredPhase Editor that handles ranges and comma-separated values
+class PreferredPhaseEditor implements ICellEditor {
+  private value: string = '';
+  private params!: ICellEditorParams;
+  private input!: HTMLInputElement;
+
+  init(params: ICellEditorParams): void {
+    console.log('🔧 PreferredPhaseEditor.init called with params:', params);
+    console.log('🔧 PreferredPhaseEditor.init params.value:', params.value);
+    console.log('🔧 PreferredPhaseEditor.init params.value type:', typeof params.value);
+    console.log('🔧 PreferredPhaseEditor.init params.value is array:', Array.isArray(params.value));
+    
+    // Convert array to display format
+    if (Array.isArray(params.value) && params.value.every((v: any) => typeof v === 'number')) {
+      this.value = params.value.join(', ');
+      console.log('✅ PreferredPhaseEditor.init: Converted array to string:', this.value);
+    } else {
+      this.value = params.value || '';
+      console.log('📝 PreferredPhaseEditor.init: Using raw value:', this.value);
+    }
+    this.params = params;
+  }
+
+  getGui(): HTMLElement {
+    console.log('🔧 PreferredPhaseEditor.getGui called, current value:', this.value);
+    this.input = document.createElement('input');
+    this.input.style.width = '100%';
+    this.input.style.height = '100%';
+    this.input.style.border = 'none';
+    this.input.style.outline = 'none';
+    this.input.style.padding = '4px';
+    this.input.placeholder = 'e.g., 1-3, 5, 7-9 or [2-4]';
+    this.input.value = this.value;
+    
+    this.input.addEventListener('input', (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      this.value = target.value;
+      console.log('📝 PreferredPhaseEditor.input event, new value:', this.value);
+    });
+    
+    this.input.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        console.log('↵ PreferredPhaseEditor.Enter key pressed, stopping edit');
+        this.params.api.stopEditing();
+      }
+    });
+    
+    return this.input;
+  }
+
+  afterGuiAttached(): void {
+    console.log('🔧 PreferredPhaseEditor.afterGuiAttached called');
+    this.input.focus();
+    this.input.select();
+  }
+
+  getValue(): any {
+    console.log('🔧 PreferredPhaseEditor.getValue called, current value:', this.value);
+    // Use normalizePreferredPhase to convert the input to an array of numbers
+    const result = normalizePreferredPhase(this.value);
+    console.log('✅ PreferredPhaseEditor.getValue returning:', result);
+    return result;
+  }
+
+  destroy(): void {
+    console.log('🔧 PreferredPhaseEditor.destroy called');
     // cleanup if needed
   }
 
@@ -216,26 +291,46 @@ export function DataGrid({ entityType }: { entityType: 'clients' | 'workers' | '
   const gridRef = useRef<any>(null);
 
   const getRowData = useCallback((): any[] => {
-    switch (entityType) {
-      case 'clients': return state.clients || [];
-      case 'workers': return state.workers || [];
-      case 'tasks': return state.tasks || [];
-      default: return [];
+    const data = (() => {
+      switch (entityType) {
+        case 'clients': return state.clients || [];
+        case 'workers': return state.workers || [];
+        case 'tasks': return state.tasks || [];
+        default: return [];
+      }
+    })();
+    
+    console.log(`📊 DataGrid.getRowData for ${entityType}:`, data);
+    if (entityType === 'tasks') {
+      data.forEach((task: any, index) => {
+        console.log(`📋 Task ${index + 1} PreferredPhase in getRowData:`, task.PreferredPhase);
+        console.log(`📋 Task ${index + 1} PreferredPhase type:`, typeof task.PreferredPhase);
+        console.log(`📋 Task ${index + 1} PreferredPhase is array:`, Array.isArray(task.PreferredPhase));
+        console.log(`📋 Task ${index + 1} Full task data:`, task);
+      });
     }
+    return data;
   }, [entityType, state]);
 
   const setRowData = useCallback((data: any[]) => {
+    console.log(`📝 DataGrid.setRowData called for ${entityType} with data:`, data);
+    
     // Normalize all rows before setting
-    const normalizedData = data.map(row => {
+    const normalizedData = data.map((row, index) => {
       const newRow = { ...row };
       if ('PreferredPhase' in newRow) {
+        console.log(`🔧 Normalizing PreferredPhase for row ${index + 1}:`, newRow.PreferredPhase);
         newRow.PreferredPhase = normalizePreferredPhase(newRow.PreferredPhase);
+        console.log(`✅ Normalized PreferredPhase for row ${index + 1}:`, newRow.PreferredPhase);
       }
       if ('AttributesJSON' in newRow) {
         newRow.AttributesJSON = normalizeAttributesJSON(newRow.AttributesJSON);
       }
       return newRow;
     });
+    
+    console.log(`📊 DataGrid.setRowData normalized data:`, normalizedData);
+    
     switch (entityType) {
       case 'clients': dispatch({ type: 'SET_CLIENTS', payload: normalizedData }); break;
       case 'workers': dispatch({ type: 'SET_WORKERS', payload: normalizedData }); break;
@@ -245,12 +340,38 @@ export function DataGrid({ entityType }: { entityType: 'clients' | 'workers' | '
   }, [entityType, dispatch]);
 
   const columns = useMemo((): any[] => {
+    console.log(`🔧 DataGrid.columns useMemo called for ${entityType}`);
+    
     if (entityType === 'clients') {
       return [
         { field: 'ClientID', headerName: 'Client ID', editable: true, width: 120 },
         { field: 'ClientName', headerName: 'Client Name', editable: true, width: 200 },
-        { field: 'PriorityLevel', headerName: 'Priority Level', editable: true, type: 'number', width: 130 },
-        { field: 'RequestedTaskIDs', headerName: 'Requested Task IDs', editable: true, cellEditor: ArrayEditor, width: 200 },
+        { 
+          field: 'PriorityLevel', 
+          headerName: 'Priority Level', 
+          editable: true, 
+          width: 130, 
+          valueParser: (params: any) => {
+            const parsed = parseInt(params.newValue);
+            return isNaN(parsed) ? params.oldValue : parsed;
+          }
+        },
+        { 
+          field: 'RequestedTaskIDs', 
+          headerName: 'Requested Task IDs', 
+          editable: true, 
+          cellEditor: ArrayEditor, 
+          width: 200,
+          valueFormatter: (params: any) => {
+            if (params.value === null || params.value === undefined || params.value === '') {
+              return '-';
+            }
+            if (Array.isArray(params.value)) {
+              return params.value.join(', ');
+            }
+            return String(params.value);
+          }
+        },
         { field: 'GroupTag', headerName: 'Group Tag', editable: true, width: 120 },
         {
           field: 'AttributesJSON',
@@ -265,64 +386,144 @@ export function DataGrid({ entityType }: { entityType: 'clients' | 'workers' | '
       return [
         { field: 'WorkerID', headerName: 'Worker ID', editable: true, width: 120 },
         { field: 'WorkerName', headerName: 'Worker Name', editable: true, width: 200 },
-        { field: 'Skills', headerName: 'Skills', editable: true, cellEditor: ArrayEditor, width: 200 },
-        { field: 'AvailableSlots', headerName: 'Available Slots', editable: true, cellEditor: JsonEditor, width: 150 },
-        { field: 'MaxLoadPerPh', headerName: 'Max Load Per Ph', editable: true, type: 'number', width: 150 },
+        { 
+          field: 'Skills', 
+          headerName: 'Skills', 
+          editable: true, 
+          cellEditor: ArrayEditor, 
+          width: 200,
+          valueFormatter: (params: any) => {
+            if (params.value === null || params.value === undefined || params.value === '') {
+              return '-';
+            }
+            if (Array.isArray(params.value)) {
+              return params.value.join(', ');
+            }
+            return String(params.value);
+          }
+        },
+        { 
+          field: 'AvailableSlots', 
+          headerName: 'Available Slots', 
+          editable: true, 
+          cellEditor: JsonEditor, 
+          width: 150,
+          valueFormatter: (params: any) => {
+            if (params.value === null || params.value === undefined || params.value === '') {
+              return '-';
+            }
+            if (Array.isArray(params.value)) {
+              return params.value.join(', ');
+            }
+            return formatJsonForDisplay(params.value);
+          }
+        },
+        { 
+          field: 'MaxLoadPerPh', 
+          headerName: 'Max Load Per Ph', 
+          editable: true, 
+          width: 150, 
+          valueParser: (params: any) => {
+            const parsed = parseInt(params.newValue);
+            return isNaN(parsed) ? params.oldValue : parsed;
+          }
+        },
         { field: 'WorkerGroup', headerName: 'Worker Group', editable: true, width: 120 },
-        { field: 'QualificationLevel', headerName: 'Qualification Level', editable: true, type: 'number', width: 150 },
+        { 
+          field: 'QualificationLevel', 
+          headerName: 'Qualification Level', 
+          editable: true, 
+          width: 150, 
+          valueParser: (params: any) => {
+            const parsed = parseInt(params.newValue);
+            return isNaN(parsed) ? params.oldValue : parsed;
+          }
+        },
       ];
     } else if (entityType === 'tasks') {
       return [
         { field: 'TaskID', headerName: 'Task ID', editable: true, width: 120 },
         { field: 'TaskName', headerName: 'Task Name', editable: true, width: 200 },
         { field: 'Category', headerName: 'Category', editable: true, width: 120 },
-        { field: 'Duration', headerName: 'Duration', editable: true, type: 'number', width: 100 },
-        { field: 'RequiredSkills', headerName: 'Required Skills', editable: true, cellEditor: ArrayEditor, width: 200 },
+        { 
+          field: 'Duration', 
+          headerName: 'Duration', 
+          editable: true, 
+          width: 100, 
+          valueParser: (params: any) => {
+            const parsed = parseInt(params.newValue);
+            return isNaN(parsed) ? params.oldValue : parsed;
+          }
+        },
+        { 
+          field: 'RequiredSkills', 
+          headerName: 'Required Skills', 
+          editable: true, 
+          cellEditor: ArrayEditor, 
+          width: 200,
+          valueFormatter: (params: any) => {
+            if (params.value === null || params.value === undefined || params.value === '') {
+              return '-';
+            }
+            if (Array.isArray(params.value)) {
+              return params.value.join(', ');
+            }
+            return String(params.value);
+          }
+        },
         {
           field: 'PreferredPhase',
           headerName: 'Preferred Phase',
           editable: true,
-          cellEditor: JsonEditor,
+          cellEditor: PreferredPhaseEditor,
           width: 150,
           valueFormatter: (params: any) => {
-            const v = params.value;
-            if (Array.isArray(v)) {
-              return v.length > 0 ? v.join(',') : '-';
+            console.log('🔧 PreferredPhase valueFormatter called with params:', params);
+            console.log('🔧 PreferredPhase valueFormatter params.value:', params.value);
+            console.log('🔧 PreferredPhase valueFormatter params.value type:', typeof params.value);
+            console.log('🔧 PreferredPhase valueFormatter full row data:', params.data);
+            
+            // Handle null, undefined, or empty values
+            if (params.value === null || params.value === undefined || params.value === '') {
+              console.log('📝 PreferredPhase valueFormatter: Empty value, returning "-"');
+              return '-';
             }
-            if (typeof v === 'object' && v !== null && Object.prototype.hasOwnProperty.call(v, 'message')) {
-              // If it's { message: "..." }, try to expand and show as array
-              const arr = normalizePreferredPhase(v.message);
-              return arr.length > 0 ? arr.join(',') : '-';
+            
+            // Ensure we have a valid array for display
+            let arr: number[];
+            if (Array.isArray(params.value) && params.value.every((v: any) => typeof v === 'number')) {
+              arr = params.value;
+              console.log('✅ PreferredPhase valueFormatter: Using existing array:', arr);
+            } else {
+              arr = normalizePreferredPhase(params.value);
+              console.log('🔄 PreferredPhase valueFormatter: Normalized to array:', arr);
             }
-            if (typeof v === 'string') {
-              const arr = normalizePreferredPhase(v);
-              return arr.length > 0 ? arr.join(',') : '-';
+            
+            // If array is empty after normalization, show "-"
+            if (arr.length === 0) {
+              console.log('📝 PreferredPhase valueFormatter: Empty array after normalization, returning "-"');
+              return '-';
             }
-            if (typeof v === 'number') {
-              return v.toString();
-            }
-            return '-';
+            
+            const result = arr.join(', ');
+            console.log('📝 PreferredPhase valueFormatter returning:', result);
+            return result;
           },
         },
-        { field: 'MaxConcurrent', headerName: 'Max Concurrent', editable: true, type: 'number', width: 130 },
+        { 
+          field: 'MaxConcurrent', 
+          headerName: 'Max Concurrent', 
+          editable: true, 
+          width: 130, 
+          valueParser: (params: any) => {
+            const parsed = parseInt(params.newValue);
+            return isNaN(parsed) ? params.oldValue : parsed;
+          }
+        },
       ];
     }
     return [];
   }, [entityType]);
-
-  const normalizePreferredPhase = (value: any): number[] => {
-    // If already an array of numbers, return as is
-    if (Array.isArray(value) && value.every(v => typeof v === 'number')) return value;
-    // If string or object with message, expand and parse
-    let str = '';
-    if (typeof value === 'string') str = value;
-    else if (typeof value === 'object' && value !== null && 'message' in value) str = value.message;
-    else if (typeof value === 'number') return [value];
-    else return [];
-    // Use expandRange to get comma-separated string, then parse numbers
-    const expanded = expandRange(str);
-    return expanded.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
-  };
 
   const normalizeAttributesJSON = (value: any): any => {
     if (typeof value === 'object' && value !== null) return value;
@@ -337,13 +538,20 @@ export function DataGrid({ entityType }: { entityType: 'clients' | 'workers' | '
   };
 
   const onCellValueChanged = useCallback((params: any) => {
+    console.log('🔧 DataGrid.onCellValueChanged called with params:', params);
+    console.log('🔧 DataGrid.onCellValueChanged field:', params.colDef.field);
+    console.log('🔧 DataGrid.onCellValueChanged old value:', params.oldValue);
+    console.log('🔧 DataGrid.onCellValueChanged new value:', params.newValue);
+    
     const updatedData = [...getRowData()];
     const idx = updatedData.findIndex((row: any) => row.id === params.data.id);
     if (idx !== -1) {
       const newRow = { ...updatedData[idx], ...params.data };
       // Normalize PreferredPhase and AttributesJSON if present
       if ('PreferredPhase' in newRow) {
+        console.log('🔧 onCellValueChanged: Normalizing PreferredPhase:', newRow.PreferredPhase);
         newRow.PreferredPhase = normalizePreferredPhase(newRow.PreferredPhase);
+        console.log('✅ onCellValueChanged: Normalized PreferredPhase:', newRow.PreferredPhase);
       }
       if ('AttributesJSON' in newRow) {
         newRow.AttributesJSON = normalizeAttributesJSON(newRow.AttributesJSON);
@@ -363,6 +571,19 @@ export function DataGrid({ entityType }: { entityType: 'clients' | 'workers' | '
   }), []);
 
   const rowData = getRowData();
+  
+  console.log(`📊 DataGrid render for ${entityType}, rowData length:`, rowData.length);
+  if (entityType === 'tasks') {
+    rowData.forEach((task, index) => {
+      console.log(`📋 Task ${index + 1} in render:`, {
+        id: task.id,
+        TaskID: task.TaskID,
+        PreferredPhase: task.PreferredPhase,
+        PreferredPhaseType: typeof task.PreferredPhase,
+        PreferredPhaseIsArray: Array.isArray(task.PreferredPhase)
+      });
+    });
+  }
 
   return (
     <div className="ag-theme-alpine" style={{ width: '100%', height: 600 }}>
@@ -377,7 +598,6 @@ export function DataGrid({ entityType }: { entityType: 'clients' | 'workers' | '
         suppressClickEdit={false}
         singleClickEdit={true}
         enableCellTextSelection={true}
-        suppressRowClickSelection={true}
         suppressCellFocus={false}
       />
     </div>

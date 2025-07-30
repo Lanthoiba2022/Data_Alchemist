@@ -38,6 +38,7 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    console.log('🚀 FileUpload.handleFileUpload started with file:', file.name);
     setIsUploading(true);
     setError(null);
     setSuccess(null);
@@ -46,12 +47,17 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
       let result;
       let transformedData;
       const fileExtension = file.name.split('.').pop()?.toLowerCase();
+      console.log('📁 FileUpload: File extension:', fileExtension);
       if (['xlsx', 'xls'].includes(fileExtension || '')) {
+        console.log('📊 FileUpload: Processing Excel file with multiple sheets');
         // Parse all sheets and dynamically map by sheet name
         const allSheets = await FileParser.parseExcelMultiSheet(file);
+        console.log('📊 FileUpload: Parsed sheets:', Object.keys(allSheets));
         let imported = false;
         Object.entries(allSheets).forEach(([sheetName, sheetData]) => {
           const normalized = sheetName.trim().toLowerCase();
+          console.log(`📋 FileUpload: Processing sheet "${sheetName}" (normalized: "${normalized}")`);
+          console.log(`📋 FileUpload: Sheet data:`, sheetData);
           if (normalized.includes('client')) {
             transformedData = DataTransformer.transformClients(sheetData.data);
             const { valid } = DataTransformer.validateAndClean(transformedData, 'client');
@@ -71,13 +77,20 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
               imported = true;
             }
           } else if (normalized.includes('task')) {
+            console.log('📋 FileUpload: Processing as tasks sheet');
+            console.log('📋 FileUpload: Raw task data before transformation:', sheetData.data);
             transformedData = DataTransformer.transformTasks(sheetData.data);
-            const { valid } = DataTransformer.validateAndClean(transformedData, 'task');
+            console.log('📋 FileUpload: Transformed task data:', transformedData);
+            const { valid, invalid } = DataTransformer.validateAndClean(transformedData, 'task');
+            console.log('📋 FileUpload: Validation results - valid:', valid.length, 'invalid:', invalid.length);
             if (valid.length > 0) {
               dispatch({ type: 'SET_TASKS', payload: valid });
               dispatch({ type: 'SET_FILE_UPLOADED', payload: 'tasks' });
               setSuccess((prev) => (prev ? prev + ' ' : '') + `Imported ${valid.length} tasks.`);
               imported = true;
+            }
+            if (invalid.length > 0) {
+              console.log('❌ FileUpload: Invalid tasks:', invalid);
             }
           }
         });
@@ -203,8 +216,12 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
           break;
           
         case 'tasks':
+          console.log('📋 FileUpload: Processing single file as tasks');
           result = await FileParser.parseFile<any>(file);
+          console.log('📋 FileUpload: Parse result:', result);
+          
           if (result.data.length > 0) {
+            console.log('📋 FileUpload: Raw data from file:', result.data);
             // After reading the file and before parsing rows:
             let headers: string[] = [];
             if (result && result.data && result.data[0]) {
@@ -223,7 +240,6 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
                     expected: expectedSchemas[entityType],
                   }),
                 });
-                
                 if (response.ok) {
                   const responseData = await response.json();
                   mapping = responseData.mapping;
@@ -243,16 +259,21 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
                 return newRow;
               });
             }
+            console.log('📋 FileUpload: Data before transformation:', remappedData);
             transformedData = DataTransformer.transformTasks(remappedData);
+            console.log('📋 FileUpload: Data after transformation:', transformedData);
+            
             const { valid, invalid } = DataTransformer.validateAndClean(transformedData, 'task');
+            console.log('📋 FileUpload: Validation results - valid:', valid.length, 'invalid:', invalid.length);
             
             if (valid.length > 0) {
+              console.log('📋 FileUpload: Dispatching valid tasks to state:', valid);
               dispatch({ type: 'SET_TASKS', payload: valid });
               dispatch({ type: 'SET_FILE_UPLOADED', payload: 'tasks' });
               setSuccess(`Successfully uploaded ${valid.length} tasks${invalid.length > 0 ? ` (${invalid.length} invalid rows skipped)` : ''}`);
             }
-            
             if (invalid.length > 0) {
+              console.log('❌ FileUpload: Invalid tasks:', invalid);
               setError(`Invalid rows: ${invalid.map(i => `Row ${i.index + 1}: ${i.error}`).join(', ')}`);
             }
           }
@@ -260,15 +281,18 @@ export function FileUpload({ entityType, onUploadComplete }: FileUploadProps) {
       }
 
       if (result.errors.length > 0) {
+        console.log('❌ FileUpload: Parse errors:', result.errors);
         setError(`Parse errors: ${result.errors.join(', ')}`);
       }
 
       if (result.data.length === 0) {
+        console.log('❌ FileUpload: No data found in file');
         setError('No valid data found in the file');
       }
 
       onUploadComplete?.();
     } catch (err) {
+      console.error('❌ FileUpload: Upload failed:', err);
       setError(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsUploading(false);
