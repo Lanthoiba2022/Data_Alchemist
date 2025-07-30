@@ -46,42 +46,75 @@ export class DataValidator {
 
   private validateClients(): ValidationError[] {
     const errors: ValidationError[] = [];
-    
+
     this.clients.forEach((client, index) => {
-      // First validate with input schema to catch basic format issues
-      const inputResult = ClientInputSchema.safeParse(client);
+      // Defensive copy
+      let c = { ...client };
+      // Fix RequestedTaskIDs
+      if (typeof c.RequestedTaskIDs === 'string') {
+        const val = c.RequestedTaskIDs.trim();
+        if (val.startsWith('[') && val.endsWith(']')) {
+          try {
+            c.RequestedTaskIDs = JSON.parse(val);
+          } catch {
+            c.RequestedTaskIDs = val.slice(1, -1).split(',').map((id: string) => id.replace(/['\"]+/g, '').trim()).filter((id: string) => id.length > 0);
+          }
+        } else {
+          c.RequestedTaskIDs = val.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0);
+        }
+      }
+      if (!Array.isArray(c.RequestedTaskIDs)) {
+        errors.push({
+          entity: 'client',
+          rowIndex: index,
+          field: 'RequestedTaskIDs',
+          message: 'RequestedTaskIDs must be an array of strings',
+          value: c.RequestedTaskIDs
+        });
+        c.RequestedTaskIDs = [];
+      }
+      // Fix PriorityLevel
+      if (typeof c.PriorityLevel !== 'number') {
+        const num = Number(c.PriorityLevel);
+        if (!isNaN(num)) c.PriorityLevel = num;
+      }
+      if (typeof c.PriorityLevel !== 'number' || c.PriorityLevel < 1 || c.PriorityLevel > 5) {
+        errors.push({
+          entity: 'client',
+          rowIndex: index,
+          field: 'PriorityLevel',
+          message: 'PriorityLevel must be a number between 1 and 5',
+          value: c.PriorityLevel
+        });
+      }
+      // Fix AttributesJSON
+      if (typeof c.AttributesJSON === 'string') {
+        try {
+          c.AttributesJSON = JSON.parse(c.AttributesJSON);
+        } catch {
+          errors.push({
+            entity: 'client',
+            rowIndex: index,
+            field: 'AttributesJSON',
+            message: 'AttributesJSON must be valid JSON',
+            value: c.AttributesJSON
+          });
+        }
+      }
+      // Validate with schema
+      const inputResult = ClientInputSchema.safeParse(c);
       if (!inputResult.success) {
         inputResult.error.issues.forEach(issue => {
-          let message = issue.message;
-          let value = client[issue.path[0] as keyof Client];
-          
-          // Provide more specific error messages for JSON fields
-          if (issue.path[0] === 'AttributesJSON') {
-            if (typeof value === 'string') {
-              try {
-                JSON.parse(value);
-              } catch {
-                message = 'Invalid JSON format';
-              }
-            } else if (typeof value === 'object' && value !== null) {
-              // Object is valid, no error
-              return;
-            }
-          }
-          
           errors.push({
             entity: 'client',
             rowIndex: index,
             field: issue.path.join('.'),
-            message,
-            value
+            message: issue.message,
+            value: c[issue.path[0] as keyof Client]
           });
         });
-        return;
       }
-
-      // Then validate with full schema for transformation issues
-      const result = ClientSchema.safeParse(client);
+      const result = ClientSchema.safeParse(c);
       if (!result.success) {
         result.error.issues.forEach(issue => {
           errors.push({
@@ -89,7 +122,7 @@ export class DataValidator {
             rowIndex: index,
             field: issue.path.join('.'),
             message: issue.message,
-            value: client[issue.path[0] as keyof Client]
+            value: c[issue.path[0] as keyof Client]
           });
         });
       }
@@ -276,7 +309,17 @@ export class DataValidator {
       // Handle both string and array formats for RequestedTaskIDs
       let requestedTaskIds: string[] = [];
       if (typeof client.RequestedTaskIDs === 'string') {
-        requestedTaskIds = client.RequestedTaskIDs.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0);
+        const val = client.RequestedTaskIDs.trim();
+        if (val.startsWith('[') && val.endsWith(']')) {
+          try {
+            requestedTaskIds = JSON.parse(val);
+          } catch {
+            // fallback to split if JSON parse fails
+            requestedTaskIds = val.slice(1, -1).split(',').map((id: string) => id.replace(/['\"]+/g, '').trim()).filter((id: string) => id.length > 0);
+          }
+        } else {
+          requestedTaskIds = val.split(',').map((id: string) => id.trim()).filter((id: string) => id.length > 0);
+        }
       } else if (Array.isArray(client.RequestedTaskIDs)) {
         requestedTaskIds = client.RequestedTaskIDs as string[];
       }
